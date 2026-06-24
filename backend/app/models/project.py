@@ -20,14 +20,13 @@ class Project(Base):
     notepad = Column(Text, nullable=True)
     risks = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
     user = relationship("User")
-    client = relationship("Client", back_populates="projects")
     milestones = relationship("Milestone", back_populates="project", cascade="all, delete-orphan")
     todos = relationship("Todo", back_populates="project", cascade="all, delete-orphan")
     timeline_events = relationship("TimelineEvent", back_populates="project", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="project", cascade="all, delete-orphan")
     contracts = relationship("Contract", back_populates="project", cascade="all, delete-orphan")
     pending_things = relationship("PendingThing", back_populates="project", cascade="all, delete-orphan")
+
