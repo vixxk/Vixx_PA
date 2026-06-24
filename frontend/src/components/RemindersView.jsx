@@ -132,7 +132,7 @@ export default function RemindersView({ onRefresh }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="reminders-view-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div className="card-title-bar" style={{ justifyContent: 'flex-end', gap: '10px' }}>
         <div style={{ display: 'flex', gap: '10px' }}>
           {pending.length > 0 && (

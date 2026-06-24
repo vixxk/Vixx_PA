@@ -182,25 +182,24 @@ export default function PaymentsView({ projects = [], onRefresh }) {
 
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div className="card-title-bar" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Filter Project:</span>
-            <select 
-              value={selectedFilterProjectId} 
-              onChange={(e) => setSelectedFilterProjectId(e.target.value)}
-            >
-              <option value="all">All Projects</option>
-              {projects.map(pr => (
-                <option key={pr.id} value={pr.id}>{pr.title}</option>
-              ))}
-            </select>
-          </div>
-          <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-            <Plus size={16} /> Log Payment
-          </button>
+    <div className="payments-view-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div className="card-title-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', width: '100%', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 auto', minWidth: '160px' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500, whiteSpace: 'nowrap' }}>Filter Project:</span>
+          <select 
+            value={selectedFilterProjectId} 
+            onChange={(e) => setSelectedFilterProjectId(e.target.value)}
+            style={{ flex: '1 1 auto', minWidth: '100px', maxWidth: '220px', padding: '6px 10px', fontSize: '0.8rem' }}
+          >
+            <option value="all">All Projects</option>
+            {projects.map(pr => (
+              <option key={pr.id} value={pr.id}>{pr.title}</option>
+            ))}
+          </select>
         </div>
+        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)} style={{ flexShrink: 0, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+          <Plus size={14} /> Log Payment
+        </button>
       </div>
 
       {/* Aggregate Cards */}

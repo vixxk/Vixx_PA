@@ -37,7 +37,7 @@ export default function FilesView({ projects = [], onRefresh }) {
     // Auto-expand projects
     const expanded = {};
     projects.forEach(p => {
-      expanded[p.id] = true; // Default all expanded
+      expanded[p.id] = false; // Default all closed
     });
     setExpandedProjects(expanded);
   }, [projects]);
@@ -134,7 +134,7 @@ export default function FilesView({ projects = [], onRefresh }) {
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="files-view-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
       {/* Creation Panel */}
       <div className="glass-panel" style={{ padding: '24px' }}>

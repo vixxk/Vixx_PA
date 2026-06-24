@@ -63,6 +63,7 @@ export default function ChatInterface({ onRefreshData }) {
   const [editingTitle, setEditingTitle] = useState('');
   const editInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const [mobileRoomsDropdownOpen, setMobileRoomsDropdownOpen] = useState(false);
 
   // Sync to localStorage
   useEffect(() => {
@@ -600,36 +601,193 @@ export default function ChatInterface({ onRefreshData }) {
         height: '100%',
         position: 'relative'
       }}>
-        <div className="chat-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingRight: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="logo-icon" style={{ width: '28px', height: '28px', background: 'transparent', boxShadow: 'none' }}>
+        <div className="chat-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingRight: '12px', paddingLeft: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="logo-icon" style={{ width: '28px', height: '28px', background: 'transparent', boxShadow: 'none', flexShrink: 0 }}>
               <img src="/bot icon.png" alt="Vixx" style={{ width: '100%', height: '100%', borderRadius: '6px', objectFit: 'contain' }} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>AI Command Center</h3>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Powered by Groq & LangGraph</p>
+              <h3 className="chat-title-main" style={{ fontSize: '0.92rem', fontWeight: 600 }}>AI Command Center</h3>
+              <p className="chat-subtitle-main" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Powered by Groq & LangGraph</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleCopyChat}
-            className="btn btn-secondary"
-            style={{ 
-              fontSize: '0.72rem', 
-              padding: '6px 12px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '6px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              cursor: 'pointer',
-              borderRadius: '6px'
-            }}
-            title="Copy Conversation"
-          >
-            <Copy size={12} />
-            Copy Chat
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Mobile Chat Selection Dropdown Trigger */}
+            <div className="mobile-chat-dropdown-container" style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="btn btn-secondary mobile-chat-select-btn"
+                onClick={() => setMobileRoomsDropdownOpen(!mobileRoomsDropdownOpen)}
+                style={{
+                  display: 'none',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.75rem',
+                  padding: '5px 8px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '6px',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer'
+                }}
+              >
+                <span style={{ maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {activeConv.title || 'Chat'}
+                </span>
+                <ChevronDown size={12} />
+              </button>
+              
+              {/* Dropdown Panel */}
+              {mobileRoomsDropdownOpen && (
+                <div 
+                  className="mobile-chat-rooms-popup glass-panel"
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: '8px',
+                    width: '220px',
+                    zIndex: 950,
+                    background: 'rgba(12, 10, 24, 0.98)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '10px',
+                    boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
+                    padding: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleCreateNewChat();
+                      setMobileRoomsDropdownOpen(false);
+                    }}
+                    style={{
+                      padding: '7px 10px',
+                      background: 'linear-gradient(135deg, var(--accent-primary) 0%, #7c3aed 100%)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: 'white',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Plus size={12} /> New Chat
+                  </button>
+                  
+                  <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)', margin: '2px 0' }} />
+                  
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {conversations.map(conv => {
+                      const isActive = conv.id === activeChatId;
+                      return (
+                        <div
+                          key={conv.id}
+                          onClick={() => {
+                            setActiveChatId(conv.id);
+                            setMobileRoomsDropdownOpen(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            background: isActive ? 'rgba(139, 92, 246, 0.15)' : 'transparent',
+                            color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexGrow: 1, marginRight: '8px' }}>
+                            {conv.title}
+                          </span>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newTitle = prompt("Rename chat room to:", conv.title);
+                                if (newTitle && newTitle.trim() !== "") {
+                                  setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, title: newTitle.trim() } : c));
+                                }
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'rgba(255, 255, 255, 0.4)',
+                                cursor: 'pointer',
+                                padding: '2px',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                              title="Rename Chat"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                            
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteChat(conv.id);
+                                if (conv.id === activeChatId) {
+                                  setMobileRoomsDropdownOpen(false);
+                                }
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'rgba(255, 255, 255, 0.4)',
+                                cursor: 'pointer',
+                                padding: '2px',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                              title="Delete Chat"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleCopyChat}
+              className="btn btn-secondary copy-chat-btn"
+              style={{ 
+                fontSize: '0.72rem', 
+                padding: '6px 10px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '4px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                cursor: 'pointer',
+                borderRadius: '6px'
+              }}
+              title="Copy Conversation"
+            >
+              <Copy size={12} />
+              <span className="copy-chat-btn-text">Copy Chat</span>
+            </button>
+          </div>
         </div>
 
         <div className="chat-messages" style={{ flex: 1, overflowY: 'auto' }}>

@@ -471,7 +471,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="workspace-detail-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%' }}>

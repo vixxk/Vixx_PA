@@ -21,7 +21,11 @@ import {
   TrendingUp,
   FileText,
   RotateCw,
-  AlertTriangle
+  AlertTriangle,
+  Menu,
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { api } from './services/api';
 import ChatInterface from './components/ChatInterface';
@@ -60,8 +64,11 @@ export default function App() {
     return null;
   });
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const navigateTo = (tab) => {
     window.location.hash = tab === 'dashboard' ? '#/' : `#/${tab}`;
+    setMobileMenuOpen(false);
   };
 
   useEffect(() => {
@@ -110,6 +117,14 @@ export default function App() {
       setSelectedProject(null);
     }
   }, [projects, selectedProjectId]);
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [mobileProjectsOpen, setMobileProjectsOpen] = useState(false);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const [toasts, setToasts] = useState([]);
 
@@ -220,8 +235,13 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {/* Mobile Sidebar Overlay */}
+      {mobileMenuOpen && (
+        <div className="mobile-sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />
+      )}
+
       {/* Persistent Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="logo-container">
           <div className="logo-icon" style={{ background: 'transparent', boxShadow: 'none' }}>
             <img src="/bot icon.png" alt="Vixx" style={{ width: '100%', height: '100%', borderRadius: '8px', objectFit: 'contain' }} />
@@ -230,6 +250,7 @@ export default function App() {
         </div>
 
         <nav className="nav-links">
+          <div className="sidebar-group-label">Core Assistant</div>
           <a 
             className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => navigateTo('dashboard')}
@@ -238,27 +259,12 @@ export default function App() {
             Command Center
           </a>
           <a 
-            className={`nav-link ${activeTab === 'projects' ? 'active' : ''}`}
-            onClick={() => {
-              navigateTo('projects');
-            }}
+            className={`nav-link ${activeTab === 'files' ? 'active' : ''}`}
+            onClick={() => navigateTo('files')}
           >
-            <Briefcase size={18} />
-            Projects
-          </a>
-          <a 
-            className={`nav-link ${activeTab === 'payments' ? 'active' : ''}`}
-            onClick={() => navigateTo('payments')}
-          >
-            <CreditCard size={18} />
-            Payments & Billings
-          </a>
-          <a 
-            className={`nav-link ${activeTab === 'reports' ? 'active' : ''}`}
-            onClick={() => navigateTo('reports')}
-          >
-            <FileText size={18} />
-            Reports Engine
+            <Paperclip size={18} />
+            <span>Pending Things</span>
+            {pendingThingsCount > 0 && <span className="nav-badge" style={{ marginLeft: 'auto', background: '#f87171', color: 'white', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 600 }}>{pendingThingsCount}</span>}
           </a>
           <a 
             className={`nav-link ${activeTab === 'reminders' ? 'active' : ''}`}
@@ -269,14 +275,37 @@ export default function App() {
             {remindersCount > 0 && <span className="nav-badge" style={{ marginLeft: 'auto', background: 'var(--accent-primary)', color: 'white', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 600 }}>{remindersCount}</span>}
           </a>
 
+          <div className="sidebar-divider" />
+          <div className="sidebar-group-label">Work & Portfolio</div>
           <a 
-            className={`nav-link ${activeTab === 'files' ? 'active' : ''}`}
-            onClick={() => navigateTo('files')}
+            className={`nav-link ${activeTab === 'projects' ? 'active' : ''}`}
+            onClick={() => {
+              navigateTo('projects');
+            }}
           >
-            <Paperclip size={18} />
-            <span>Pending Things</span>
-            {pendingThingsCount > 0 && <span className="nav-badge" style={{ marginLeft: 'auto', background: '#f87171', color: 'white', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 600 }}>{pendingThingsCount}</span>}
+            <Briefcase size={18} />
+            Projects
           </a>
+          <a 
+            className={`nav-link ${activeTab === 'reports' ? 'active' : ''}`}
+            onClick={() => navigateTo('reports')}
+          >
+            <FileText size={18} />
+            Reports Engine
+          </a>
+
+          <div className="sidebar-divider" />
+          <div className="sidebar-group-label">Financials</div>
+          <a 
+            className={`nav-link ${activeTab === 'payments' ? 'active' : ''}`}
+            onClick={() => navigateTo('payments')}
+          >
+            <CreditCard size={18} />
+            Payments & Billings
+          </a>
+
+          <div className="sidebar-divider" />
+          <div className="sidebar-group-label">System</div>
           <a 
             className={`nav-link ${activeTab === 'integrations' ? 'active' : ''}`}
             onClick={() => navigateTo('integrations')}
@@ -290,17 +319,40 @@ export default function App() {
       {/* Main Content Pane */}
       <main className="main-content">
         <header className="top-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-          <h1 className="page-title">
-            {activeTab === 'dashboard' && 'AI Command Center'}
-            {activeTab === 'projects' && 'Projects Portfolio'}
-            {activeTab === 'payments' && 'Payments & Billings'}
-            {activeTab === 'reports' && 'PDF Reports & Billings Engine'}
-            {activeTab === 'reminders' && 'Reminders & Alerts'}
-            {activeTab === 'timeline' && 'Timeline & Milestones'}
-            {activeTab === 'files' && 'Workspace Pending Things'}
-            {activeTab === 'integrations' && 'Integrations'}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {(activeTab !== 'dashboard' || selectedProjectId) && (
+              <button 
+                className="mobile-header-btn back-btn" 
+                onClick={() => {
+                  if (selectedProjectId) {
+                    window.location.hash = '#/projects';
+                  } else {
+                    window.location.hash = '#/';
+                  }
+                }}
+              >
+                <ArrowLeft size={20} />
+              </button>
+            )}
+            
+            <h1 className="page-title">
+              {activeTab === 'dashboard' && 'AI Command Center'}
+              {activeTab === 'projects' && 'Projects Portfolio'}
+              {activeTab === 'payments' && 'Payments & Billings'}
+              {activeTab === 'reports' && 'PDF Reports & Billings Engine'}
+              {activeTab === 'reminders' && 'Reminders & Alerts'}
+              {activeTab === 'timeline' && 'Timeline & Milestones'}
+              {activeTab === 'files' && 'Workspace Pending Things'}
+              {activeTab === 'integrations' && 'Integrations'}
+            </h1>
+          </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button 
+              className="mobile-header-btn hamburger-btn" 
+              onClick={() => setMobileMenuOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
             {!localStorage.getItem('google_token') && (
               <button
                 onClick={async () => {
@@ -320,7 +372,101 @@ export default function App() {
           </div>
         </header>
 
-        {activeTab === 'dashboard' && (
+        {activeTab === 'dashboard' && isMobile && (
+          <div className="mobile-dashboard-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+            {/* Active Projects Dropdown Popup */}
+            <div className="mobile-projects-dropdown-wrapper" style={{ width: '100%', position: 'relative', zIndex: 850 }}>
+              <button
+                type="button"
+                onClick={() => setMobileProjectsOpen(!mobileProjectsOpen)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  background: 'rgba(18, 16, 33, 0.85)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '10px',
+                  color: 'var(--text-primary)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(10px)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Briefcase size={14} color="var(--accent-primary)" />
+                  <span>Active Projects ({projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length})</span>
+                </div>
+                {mobileProjectsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+
+              {mobileProjectsOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: '6px',
+                    background: 'rgba(12, 10, 24, 0.98)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '10px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                    padding: '6px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    backdropFilter: 'blur(20px)'
+                  }}
+                >
+                  {projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length === 0 ? (
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '8px', textAlign: 'center' }}>No active projects found.</p>
+                  ) : (
+                    projects.filter(p => p.status !== 'completed' && p.status !== 'finished').map(p => (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          window.location.hash = `#/projects/${p.id}`;
+                          setMobileProjectsOpen(false);
+                        }}
+                        style={{
+                          padding: '8px 10px',
+                          background: 'rgba(255, 255, 255, 0.02)',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          color: 'var(--text-primary)',
+                          fontSize: '0.78rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <span style={{ fontWeight: 500 }}>{p.title}</span>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{p.status || 'Active'}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Chat interface in the middle */}
+            <ChatInterface onRefreshData={fetchData} />
+
+            {/* Stats Cards at the bottom */}
+            <DashboardStats 
+              projects={projects} 
+              todos={todos} 
+              events={events} 
+            />
+          </div>
+        )}
+
+        {activeTab === 'dashboard' && !isMobile && (
           <div className="dashboard-grid">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
               <DashboardStats 

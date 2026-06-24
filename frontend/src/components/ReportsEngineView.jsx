@@ -85,7 +85,7 @@ export default function ReportsEngineView({ projects = [] }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="reports-view-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '24px', alignItems: 'stretch' }}>
         {/* Form Configurator */}

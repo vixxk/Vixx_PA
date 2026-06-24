@@ -148,6 +148,22 @@ p {
   list-style: none;
 }
 
+.sidebar-group-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin: 16px 12px 6px 12px;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 10px 12px;
+}
+
+
 .nav-link {
   display: flex;
   align-items: center;
@@ -229,6 +245,13 @@ p {
   margin-bottom: 8px;
 }
 
+.mobile-header-btn,
+.mobile-sidebar-overlay {
+  display: none;
+}
+
+
+
 .page-title {
   font-size: 2.2rem;
   font-weight: 700;
@@ -277,7 +300,10 @@ p {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
+
 
 .list-container {
   display: flex;
@@ -760,4 +786,635 @@ select option {
     opacity: 1;
   }
 }
+
+/* ==========================================================================
+   Responsive Design System (Mobile & Tablet)
+   ========================================================================== */
+
+/* ── Tablet/Medium Viewports (< 1024px) ── */
+@media (max-width: 1024px) {
+  /* Collapse Sidebar to Compact Icon-Only View */
+  .sidebar {
+    width: 72px !important;
+    padding: 24px 8px !important;
+    align-items: center !important;
+  }
+  .logo-text,
+  .user-info,
+  .sidebar-footer .user-info {
+    display: none !important;
+  }
+  .logo-container {
+    margin-bottom: 24px !important;
+    justify-content: center !important;
+    padding: 0 !important;
+  }
+  .nav-links {
+    gap: 12px !important;
+  }
+  .nav-link {
+    justify-content: center !important;
+    padding: 12px 0 !important;
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 12px !important;
+  }
+  .nav-link span {
+    display: none !important;
+  }
+  .sidebar-footer {
+    justify-content: center !important;
+    padding: 16px 0 !important;
+  }
+
+  /* Shift Main Content to Align with Collapsed Sidebar */
+  .main-content {
+    margin-left: 72px !important;
+    padding: 24px !important;
+    gap: 24px !important;
+  }
+
+  /* Dashboard Column Wrapping */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+  }
+
+  /* Split/Inline Grids Overrides */
+  [style*="display: grid"][style*="1.4fr 1fr"],
+  [style*="display: grid"][style*="1.2fr 1fr"],
+  [style*="display: grid"][style*="1.2fr 0.8fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  
+  [style*="display: grid"][style*="repeat(3, 1fr)"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ── Mobile/Small Viewports (< 768px) ── */
+@media (max-width: 768px) {
+  /* Prevent browser-level zooming on iOS Safari when focusing inputs */
+  input, select, textarea, .input-field {
+    font-size: 16px !important;
+  }
+
+  /* Hamburger & Back Header Buttons on Mobile */
+  .mobile-header-btn {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-primary) !important;
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 10px !important;
+    cursor: pointer !important;
+    transition: all 0.2s !important;
+  }
+
+  .mobile-header-btn:active {
+    background: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  .mobile-header-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  /* Premium Sliding Mobile Drawer Sidebar (Right Side) */
+  .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: auto !important;
+    right: -280px !important; /* Start hidden/slid out to the right */
+    bottom: 0 !important;
+    width: 260px !important;
+    height: 100vh !important;
+    background: rgba(10, 8, 19, 0.95) !important;
+    backdrop-filter: blur(25px) !important;
+    -webkit-backdrop-filter: blur(25px) !important;
+    box-shadow: -5px 0 30px rgba(0, 0, 0, 0.5) !important;
+    z-index: 1000 !important;
+    flex-direction: column !important;
+    padding: 20px !important;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-right: none !important;
+    border-top-left-radius: 20px !important;
+    border-bottom-left-radius: 20px !important;
+  }
+
+  /* When mobileMenuOpen is true, slide it in */
+  .sidebar.mobile-open {
+    right: 0 !important;
+    left: auto !important;
+  }
+
+  .logo-container {
+    display: flex !important;
+    margin-bottom: 24px !important;
+    padding: 0 8px !important;
+  }
+
+  .logo-text {
+    display: block !important;
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+  }
+
+  .sidebar-footer {
+    display: flex !important;
+    margin-top: auto !important;
+    padding: 10px 8px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .sidebar-footer .user-info {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .sidebar-footer .user-info span {
+    font-size: 0.72rem !important;
+  }
+
+  .sidebar-group-label {
+    font-size: 0.56rem !important;
+    margin: 10px 12px 2px 12px !important;
+    letter-spacing: 0.08em !important;
+  }
+
+  .sidebar-divider {
+    margin: 4px 12px !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .nav-links {
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    gap: 4px !important;
+  }
+
+  .nav-link {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    height: 36px !important;
+    padding: 0 12px !important;
+    border: none !important;
+    color: var(--text-secondary) !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease !important;
+    gap: 10px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .nav-link span {
+    display: block !important;
+    font-size: 0.78rem !important;
+  }
+
+  .nav-link.active {
+    background: rgba(139, 92, 246, 0.15) !important;
+    color: var(--accent-primary) !important;
+    border: none !important;
+  }
+
+  /* Mobile overlay behind sidebar drawer */
+  .mobile-sidebar-overlay {
+    display: block !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: rgba(0, 0, 0, 0.55) !important;
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+    z-index: 999 !important;
+  }
+
+  /* Compact Sticky Top Page Header */
+  .top-header {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 10px 8px 10px 14px !important;
+    background: rgba(10, 8, 19, 0.75) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+    margin: -14px -14px 14px -14px !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 900 !important;
+  }
+
+  .top-header > div:first-child {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .page-title {
+    font-size: 1.0rem !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+  }
+
+  .top-header button:not(.mobile-header-btn) {
+    font-size: 0.68rem !important;
+    padding: 5px 9px !important;
+  }
+
+  /* Mobile Content Viewport Adjustments */
+  .main-content {
+    margin-left: 0 !important;
+    margin-bottom: 24px !important; /* Normal bottom spacing now that we don't have bottom nav */
+    padding: 14px !important;
+    gap: 16px !important;
+  }
+
+  /* Smaller global font scaling */
+  p, span, label, input, select, textarea {
+    font-size: 0.78rem !important;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.01em;
+  }
+
+  .glass-panel {
+    padding: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .btn {
+    padding: 8px 14px !important;
+    font-size: 0.8rem !important;
+    border-radius: 8px !important;
+  }
+
+  /* ──────────────────────────────────────────
+     PAGE-SPECIFIC MOBILE DESIGNS
+     ────────────────────────────────────────── */
+
+  /* 1. Dashboard View Container */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .dashboard-grid .stats-bar,
+  .mobile-dashboard-container .stats-bar {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 10px !important;
+    width: 100% !important;
+    padding-bottom: 8px !important;
+    scrollbar-width: none !important;
+  }
+
+  .dashboard-grid .stats-bar::-webkit-scrollbar,
+  .mobile-dashboard-container .stats-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .dashboard-grid .stats-bar > div,
+  .mobile-dashboard-container .stats-bar > div {
+    flex: 0 0 145px !important;
+    min-width: 145px !important;
+    margin-bottom: 0 !important;
+    grid-column: auto !important;
+  }
+
+  .dashboard-grid .stat-card,
+  .mobile-dashboard-container .stat-card {
+    padding: 12px !important;
+    gap: 4px !important;
+    border-radius: 10px !important;
+  }
+
+  .dashboard-grid .stat-label {
+    font-size: 0.72rem !important;
+  }
+
+  .dashboard-grid .stat-value {
+    font-size: 1.35rem !important;
+  }
+
+  /* Active Projects Sidebar on Mobile */
+  .dashboard-grid > div:last-child {
+    padding: 12px !important;
+  }
+
+  .dashboard-grid > div:last-child h3 {
+    font-size: 0.95rem !important;
+  }
+
+  .dashboard-grid > div:last-child p {
+    font-size: 0.78rem !important;
+  }
+
+  .dashboard-grid > div:last-child div[style*="cursor: pointer"] {
+    padding: 6px 10px !important;
+    border-radius: 6px !important;
+  }
+
+  .dashboard-grid > div:last-child div[style*="cursor: pointer"] span {
+    font-size: 0.78rem !important;
+  }
+
+  /* 2. Projects Portfolio View Container */
+  .projects-view-container .projects-grid,
+  .projects-view-container [style*="display: grid"][style*="repeat(auto-fill, minmax(320px, 1fr))"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .projects-view-container .glass-panel {
+    padding: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .projects-view-container h3,
+  .projects-view-container h4 {
+    font-size: 0.95rem !important;
+  }
+
+  /* 3. Project Detail Workspace */
+  .workspace-detail-container {
+    gap: 16px !important;
+  }
+
+  /* Header/Title block */
+  .workspace-detail-container > div:first-child h2 {
+    font-size: 1.1rem !important;
+  }
+
+  /* Workspace Navigation Tabs - wraps into neat sub-grid */
+  .workspace-detail-container [style*="display: flex"][style*="padding: 6px"][style*="border-radius: 12px"] {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    padding: 6px !important;
+    background: rgba(18, 16, 33, 0.4) !important;
+    border-radius: 10px !important;
+  }
+
+  .workspace-detail-container [style*="display: flex"][style*="padding: 6px"][style*="border-radius: 12px"] button {
+    flex: 1 1 calc(50% - 4px) !important;
+    padding: 6px 8px !important;
+    font-size: 0.74rem !important;
+    justify-content: center !important;
+    border-radius: 6px !important;
+  }
+
+  .workspace-detail-container [style*="display: flex"][style*="padding: 6px"][style*="border-radius: 12px"] button:last-child {
+    flex: 1 1 100% !important; /* Centered full-width item for report engine */
+  }
+
+  /* Collapse workspace detail layout grids */
+  .workspace-detail-container [style*="display: grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* 4. Payments Ledger View */
+  .payments-view-container .stats-bar {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .payments-view-container .stats-bar .stat-card {
+    padding: 12px !important;
+  }
+
+  .payments-view-container .stats-bar .stat-value {
+    font-size: 1.35rem !important;
+  }
+
+  /* Render payment ledger logs into ultra-clean compact rows */
+  .payments-view-container .list-item {
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 10px 12px !important;
+    border-radius: 10px !important;
+    gap: 8px !important;
+  }
+
+  .payments-view-container .list-item > div:first-child {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    align-items: flex-start !important;
+    min-width: 0 !important;
+  }
+
+  .payments-view-container .list-item h4 {
+    font-size: 0.85rem !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    max-width: 160px !important;
+  }
+
+  .payments-view-container .list-item .item-meta {
+    margin: 0 !important;
+    font-size: 0.72rem !important;
+    gap: 6px !important;
+  }
+
+  .payments-view-container .list-item > div:last-child {
+    width: auto !important;
+    border: none !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 4px !important;
+  }
+
+  .payments-view-container .list-item .badge {
+    padding: 2px 6px !important;
+    font-size: 0.65rem !important;
+  }
+
+  .payments-view-container .list-item span[style*="font-size: 1.2rem"] {
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+  }
+
+  /* 5. Reminders View Container */
+  .reminders-view-container {
+    gap: 16px !important;
+  }
+
+  .reminders-view-container [style*="display: grid"][style*="repeat(3, 1fr)"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .reminders-view-container .glass-panel {
+    padding: 12px !important;
+    border-radius: 12px !important;
+    min-height: auto !important;
+  }
+
+  .reminders-view-container .glass-panel h4 {
+    font-size: 0.9rem !important;
+  }
+
+  .reminders-view-container .glass-panel p {
+    font-size: 0.76rem !important;
+  }
+
+  /* 6. Reports View Container */
+  .reports-view-container [style*="display: grid"][style*="1.4fr 1fr"],
+  .reports-view-container [style*="display: grid"][style*="1.2fr 1fr"],
+  .reports-view-container [style*="display: grid"][style*="repeat(auto-fill, minmax(240px, 1fr))"] {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .reports-view-container form {
+    padding: 16px !important;
+    gap: 14px !important;
+  }
+
+  /* 7. Files & Pending Things View */
+  .files-view-container .glass-panel {
+    padding: 16px !important;
+  }
+
+  .files-view-container [style*="display: grid"][style*="repeat(auto-fit, minmax(200px, 1fr))"] {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .files-view-container .list-item {
+    flex-direction: row !important;
+    padding: 8px 12px !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+  }
+
+  .files-view-container .list-item span {
+    font-size: 0.78rem !important;
+  }
+
+  /* ──────────────────────────────────────────
+     CHAT INTERFACE & BOT MOBILE REDESIGN
+     ────────────────────────────────────────── */
+  .chat-container {
+    flex-direction: column !important;
+    height: 500px !important; /* Larger chat box for better reading/interaction */
+    border-radius: 16px !important;
+  }
+
+  .chat-sidebar {
+    display: none !important; /* Hide rooms list sidebar on mobile */
+  }
+
+  .mobile-chat-select-btn {
+    display: flex !important; /* Show dropdown trigger on mobile */
+  }
+
+  .copy-chat-btn-text {
+    display: none !important; /* Collapse copy button text on mobile */
+  }
+
+  .chat-header {
+    padding: 10px 8px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .chat-header h3 {
+    font-size: 0.88rem !important;
+  }
+
+  .chat-header p {
+    font-size: 0.68rem !important;
+  }
+
+  .chat-messages {
+    padding: 12px !important;
+    gap: 12px !important;
+  }
+
+  /* Micro chat bubble padding and sizes */
+  .chat-bubble {
+    max-width: 95% !important;
+    padding: 8px 12px !important;
+    font-size: 0.82rem !important;
+    line-height: 1.45 !important;
+    border-radius: 10px !important;
+  }
+
+  .chat-bubble p {
+    font-size: 0.82rem !important;
+  }
+
+  .chat-bubble.user {
+    border-bottom-right-radius: 2px !important;
+  }
+
+  .chat-bubble.assistant {
+    border-bottom-left-radius: 2px !important;
+  }
+
+  .chat-input-container {
+    padding: 10px !important;
+  }
+
+  .chat-input-wrapper {
+    padding: 4px 8px !important;
+    border-radius: 8px !important;
+  }
+
+  .chat-input {
+    font-size: 0.82rem !important;
+    padding: 6px 2px !important;
+  }
+
+  .chat-input-wrapper button {
+    padding: 6px 12px !important;
+  }
+
+  /* Copy Button on Mobile */
+  .msg-copy-btn {
+    opacity: 1 !important;
+    background: rgba(18, 16, 33, 0.85) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    padding: 3px !important;
+    top: 4px !important;
+    right: 4px !important;
+  }
+
+  /* Dialog / Modals */
+  .auth-card,
+  [style*="max-width: 440px"],
+  [style*="max-width: 500px"],
+  [style*="max-width: 600px"] {
+    width: calc(100vw - 24px) !important;
+    padding: 20px 16px !important;
+    border-radius: 16px !important;
+  }
+}
+
+
+
+
 

@@ -102,7 +102,7 @@ export default function ProjectsView({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="projects-view-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div className="card-title-bar" style={{ justifyContent: 'flex-end' }}>
         <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
           <Plus size={16} /> New Project
