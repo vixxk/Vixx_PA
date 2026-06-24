@@ -24,7 +24,6 @@ from app.services import project_service, task_service, payment_service
 from app.services import timeline_service, reminder_service, pending_service
 from app.services import report_service
 from app.services import memory_service
-from app.services import client_service, analytics_service, suggestion_service
 
 router = APIRouter(prefix="/ai", tags=["AI Orchestrator"])
 
@@ -213,10 +212,6 @@ async def process_ai_command(
             summary_msg = await _handle_pending(db, user_id, final_state, session_data, raw_input)
         elif intent == "generate_report":
             summary_msg = await _handle_report(db, user_id, final_state, session_data, raw_input)
-        elif intent == "manage_client":
-            summary_msg = await _handle_client(db, user_id, final_state, initial_state, session_data, raw_input)
-        elif intent == "analytics":
-            summary_msg = await _handle_analytics(db, user_id, final_state, session_data, raw_input)
     except HTTPException:
         raise
     except Exception as e:
@@ -281,9 +276,6 @@ def _extract_entities(final_state: dict) -> Optional[dict]:
         last = todos[-1]
         if isinstance(last, dict) and last.get("title"):
             entities["task"] = last["title"]
-    client = final_state.get("client")
-    if client and isinstance(client, dict) and client.get("name"):
-        entities["client"] = client["name"]
     return entities if entities else None
 
 
@@ -550,43 +542,6 @@ async def _handle_pending(db, user_id, final_state, session_data, raw_input):
 async def _handle_report(db, user_id, final_state, session_data, raw_input):
     report_data = final_state.get("report") or {}
     return await report_service.generate_report(db, user_id, report_data, raw_input, session_data)
-
-
-async def _handle_client(db, user_id, final_state, initial_state, session_data, raw_input):
-    client_data = final_state.get("client") or {}
-    action = client_data.get("action") or "create"
-    
-    if action in ["read", "list", "query"]:
-        return await client_service.list_clients(db, user_id)
-    elif action == "delete":
-        confirmed = initial_state.get("confirmed_deletion", False) or final_state.get("confirmed_deletion", False)
-        result = await client_service.delete_client(db, user_id, client_data.get("name"), confirmed)
-        if result.get("needs_confirmation"):
-            session_data["pending_delete_action"] = final_state
-            final_state["needs_clarification"] = True
-            final_state["clarification_message"] = result["message"]
-            session_data["pending_state"] = final_state
-            return result["message"]
-        return result["message"]
-    elif action == "update":
-        return await client_service.update_client(db, user_id, client_data)
-    else:  # create
-        return await client_service.create_client(db, user_id, client_data)
-
-
-async def _handle_analytics(db, user_id, final_state, session_data, raw_input):
-    analytics_data = final_state.get("analytics") or {}
-    action = analytics_data.get("action") or "dashboard"
-    
-    if action == "summary":
-        return await analytics_service.get_analytics_markdown_summary(db, user_id)
-    elif action == "suggest" or "suggest" in raw_input.lower() or "alert" in raw_input.lower():
-        return await suggestion_service.get_suggestions_markdown(db, user_id)
-    else:
-        # Default: get both analytics dashboard summary + active recommendations
-        summary = await analytics_service.get_analytics_markdown_summary(db, user_id)
-        suggestions = await suggestion_service.get_suggestions_markdown(db, user_id)
-        return f"{summary}\n\n---\n\n{suggestions}"
 
 
 # ══════════════════════════════════════════════════════════════

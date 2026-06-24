@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
-from app.routers import auth, project, todo, timeline, ai, sync, payment, contract, pending_thing, reminder, client, analytics
+from app.routers import auth, project, todo, timeline, ai, sync, payment, contract, pending_thing, reminder
 from fastapi.staticfiles import StaticFiles
 import os
 
@@ -47,8 +47,6 @@ app.include_router(payment.router, prefix="/api/v1")
 app.include_router(contract.router, prefix="/api/v1")
 app.include_router(pending_thing.router, prefix="/api/v1")
 app.include_router(reminder.router, prefix="/api/v1")
-app.include_router(client.router, prefix="/api/v1")
-app.include_router(analytics.router, prefix="/api/v1")
 
 # Mount static uploads directory
 os.makedirs("uploads", exist_ok=True)

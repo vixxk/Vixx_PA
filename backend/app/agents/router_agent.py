@@ -21,14 +21,6 @@ from langchain_core.messages import SystemMessage, HumanMessage
 # Fallback deterministic router — ordered by specificity (more specific intents first)
 # Fallback deterministic router — ordered by specificity (more specific intents first)
 INTENT_KEYWORDS = {
-    "analytics": [
-        "analytics", "dashboard", "productivity", "completion rate", "workload", "stats",
-        "health score", "performance", "financial health", "revenue trend", "suggest", "suggestions",
-    ],
-    "manage_client": [
-        "client", "clients", "add client", "delete client", "list clients", "update client",
-        "new client", "client scoring", "client score",
-    ],
     "generate_report": [
         "pdf", "report", "export", "download report", "generate report",
         "print report", "give me a pdf", "create pdf", "export pdf",
@@ -114,8 +106,6 @@ async def run_router_agent(state: WorkflowState) -> Dict[str, Any]:
             "- 'set_reminder': Set, schedule, view, list, cancel, or delete REMINDERS/ALERTS.\n"
             "- 'track_pending': Create, list, view, complete, or delete PENDING items (things client needs to send, credentials, etc).\n"
             "- 'generate_report': Generate a PDF, report, export, or document.\n"
-            "- 'analytics': View dashboard stats, financial overview across ALL projects.\n"
-            "- 'manage_client': Create, list, update, view, or delete CLIENT entities.\n"
             "- 'generate_summary': Generate a high-level kickoff summary.\n"
             "- 'clarify': Ambiguous, general conversation, or unknown.\n\n"
             "CRITICAL RULES:\n"

@@ -11,7 +11,6 @@ from app.models.reminder import Reminder
 from app.models.conversation_log import ConversationLog
 from app.models.entity_memory import EntityMemory
 from app.models.session_summary import SessionSummary
-from app.models.client import Client
 from app.models.session_state import SessionState
 
 __all__ = [
@@ -28,6 +27,5 @@ __all__ = [
     "ConversationLog",
     "EntityMemory",
     "SessionSummary",
-    "Client",
     "SessionState",
 ]

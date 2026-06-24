@@ -380,48 +380,5 @@ export const api = {
       });
       return handleResponse(response);
     }
-  },
-
-  clients: {
-    list: async () => {
-      const response = await fetch(`${API_BASE_URL}/clients/`, {
-        method: 'GET',
-        headers: getHeaders(),
-      });
-      return handleResponse(response);
-    },
-    create: async (clientData) => {
-      const response = await fetch(`${API_BASE_URL}/clients/`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(clientData),
-      });
-      return handleResponse(response);
-    },
-    update: async (id, clientData) => {
-      const response = await fetch(`${API_BASE_URL}/clients/${id}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify(clientData),
-      });
-      return handleResponse(response);
-    },
-    delete: async (id) => {
-      const response = await fetch(`${API_BASE_URL}/clients/${id}`, {
-        method: 'DELETE',
-        headers: getHeaders(),
-      });
-      return handleResponse(response);
-    }
-  },
-
-  analytics: {
-    get: async () => {
-      const response = await fetch(`${API_BASE_URL}/analytics/`, {
-        method: 'GET',
-        headers: getHeaders(),
-      });
-      return handleResponse(response);
-    }
   }
 };
