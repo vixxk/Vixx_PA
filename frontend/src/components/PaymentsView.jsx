@@ -183,13 +183,7 @@ export default function PaymentsView({ projects = [], onRefresh }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div className="card-title-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Payments & Billings</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-            Monitor contract cashflows, invoice statuses, and income summaries.
-          </p>
-        </div>
+      <div className="card-title-bar" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Filter Project:</span>
@@ -477,9 +471,10 @@ export default function PaymentsView({ projects = [], onRefresh }) {
               return (
                 <div key={p.id} className="glass-panel list-item" style={{ 
                   padding: '16px 20px', 
-                  borderRadius: '14px', 
-                  background: 'rgba(255, 255, 255, 0.02)', 
-                  border: '1px solid rgba(255, 255, 255, 0.05)'
+                  borderRadius: '16px', 
+                  background: 'var(--glass-bg)', 
+                  border: '1px solid var(--glass-border)',
+                  backdropFilter: 'var(--glass-blur)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1, minWidth: 0 }}>
                     <div style={{ 

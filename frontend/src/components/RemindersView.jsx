@@ -133,13 +133,7 @@ export default function RemindersView({ onRefresh }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div className="card-title-bar">
-        <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Reminders & Alerts</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-            Manage scheduled WhatsApp & email reminders. Vixx sends them automatically.
-          </p>
-        </div>
+      <div className="card-title-bar" style={{ justifyContent: 'flex-end', gap: '10px' }}>
         <div style={{ display: 'flex', gap: '10px' }}>
           {pending.length > 0 && (
             <button className="btn btn-secondary" onClick={handleClearAll} style={{ fontSize: '0.78rem', padding: '8px 14px' }}>
@@ -257,7 +251,7 @@ export default function RemindersView({ onRefresh }) {
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Clock size={16} style={{ color: '#fbbf24' }} /> Upcoming Reminders ({pending.length})
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
             {pending.map(r => {
               const isOvd = isOverdue(r.remind_at);
               const chanColor = r.channel === 'whatsapp' ? '#25D366' : r.channel === 'email' ? '#60a5fa' : 'var(--accent-primary)';
@@ -280,15 +274,18 @@ export default function RemindersView({ onRefresh }) {
                     padding: '20px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '12px',
-                    borderRadius: '14px',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    justifyContent: 'space-between',
+                    gap: '14px',
+                    borderRadius: '16px',
+                    border: '1px solid var(--glass-border)',
                     borderLeft: `4px solid ${isOvd ? '#f87171' : chanColor}`,
-                    background: 'rgba(255, 255, 255, 0.01)',
-                    boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+                    background: 'var(--glass-bg)',
+                    backdropFilter: 'var(--glass-blur)',
+                    boxShadow: 'var(--shadow-md)',
                     transition: 'all 0.25s ease',
                     position: 'relative',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    minHeight: '160px'
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-3px)';
@@ -297,52 +294,58 @@ export default function RemindersView({ onRefresh }) {
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = 'none';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)';
+                    e.currentTarget.style.borderColor = 'var(--glass-border)';
+                    e.currentTarget.style.background = 'var(--glass-bg)';
                   }}
                 >
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', minWidth: 0, flex: 1 }}>
-                      <div style={{ 
-                        width: '36px', 
-                        height: '36px', 
-                        borderRadius: '10px', 
-                        background: chanGrad, 
-                        border: chanBorder,
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        color: chanColor,
-                        flexShrink: 0
-                      }}>
-                        {getChannelIcon(r.channel)}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ 
+                          width: '32px', 
+                          height: '32px', 
+                          borderRadius: '8px', 
+                          background: chanGrad, 
+                          border: chanBorder,
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          color: chanColor,
+                          flexShrink: 0
+                        }}>
+                          {getChannelIcon(r.channel)}
+                        </div>
+                        {getStatusBadge(r.status)}
                       </div>
-                      <h4 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.title}>
+                      
+                      <button
+                        className="btn"
+                        style={{ padding: '6px', background: 'transparent', color: 'rgba(248, 113, 113, 0.7)', border: 'none', cursor: 'pointer', transition: 'color 0.2s' }}
+                        onClick={() => handleDelete(r.id)}
+                        title="Cancel reminder"
+                        onMouseEnter={(e) => e.currentTarget.style.color = '#f87171'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(248, 113, 113, 0.7)'}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+
+                    <div>
+                      <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }} title={r.title}>
                         {r.title}
                       </h4>
+                      {r.description && (
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
+                          {r.description}
+                        </p>
+                      )}
                     </div>
-                    <button
-                      className="btn"
-                      style={{ padding: '6px', background: 'transparent', color: 'rgba(248, 113, 113, 0.7)', border: 'none', cursor: 'pointer', transition: 'color 0.2s' }}
-                      onClick={() => handleDelete(r.id)}
-                      title="Cancel reminder"
-                      onMouseEnter={(e) => e.currentTarget.style.color = '#f87171'}
-                      onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(248, 113, 113, 0.7)'}
-                    >
-                      <Trash2 size={15} />
-                    </button>
                   </div>
 
-                  {r.description && (
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5', minHeight: '38px' }}>
-                      {r.description}
-                    </p>
-                  )}
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginTop: 'auto', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                     <span style={{ 
-                      fontSize: '0.75rem', 
-                      color: isOvd ? '#f87171' : 'var(--text-primary)', 
+                      fontSize: '0.72rem', 
+                      color: isOvd ? '#f87171' : 'var(--text-secondary)', 
                       background: isOvd ? 'rgba(248, 113, 113, 0.1)' : 'rgba(255,255,255,0.03)',
                       padding: '4px 8px',
                       borderRadius: '6px',
@@ -354,10 +357,6 @@ export default function RemindersView({ onRefresh }) {
                     }}>
                       <Clock size={12} /> {formatTime(r.remind_at)}
                     </span>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {getStatusBadge(r.status)}
-                    </div>
                   </div>
                 </div>
               );
@@ -372,57 +371,119 @@ export default function RemindersView({ onRefresh }) {
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-secondary)' }}>
             Execution History ({past.length})
           </h3>
-          <div className="glass-panel" style={{ padding: '0px', overflow: 'hidden', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '14px' }}>
-            <div style={{ maxHeight: '600px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-              {past.map((r, idx) => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+            {past.map(r => {
+              const statColor = r.status === 'sent' ? '#34d399' : r.status === 'failed' ? '#f87171' : r.status === 'cancelled' ? '#9ca3af' : '#fbbf24';
+              const chanColor = r.channel === 'whatsapp' ? '#25D366' : r.channel === 'email' ? '#60a5fa' : 'var(--accent-primary)';
+              const chanGrad = r.channel === 'whatsapp' 
+                ? 'linear-gradient(135deg, rgba(37, 211, 102, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%)' 
+                : r.channel === 'email'
+                ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%)'
+                : 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%)';
+              const chanBorder = r.channel === 'whatsapp' 
+                ? '1px solid rgba(37, 211, 102, 0.2)' 
+                : r.channel === 'email'
+                ? '1px solid rgba(96, 165, 250, 0.2)'
+                : '1px solid rgba(139, 92, 246, 0.2)';
+
+              return (
                 <div
                   key={r.id}
+                  className="glass-panel"
                   style={{
+                    padding: '20px',
                     display: 'flex',
+                    flexDirection: 'column',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '14px 20px',
-                    borderBottom: idx === past.length - 1 ? 'none' : '1px solid rgba(255, 255, 255, 0.04)',
-                    background: 'rgba(255, 255, 255, 0.005)',
-                    transition: 'background 0.2s'
+                    gap: '14px',
+                    borderRadius: '16px',
+                    border: '1px solid var(--glass-border)',
+                    borderLeft: `4px solid ${statColor}`,
+                    background: 'var(--glass-bg)',
+                    backdropFilter: 'var(--glass-blur)',
+                    boxShadow: 'var(--shadow-md)',
+                    transition: 'all 0.25s ease',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    minHeight: '160px',
+                    opacity: 0.85
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.005)'}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-3px)';
+                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.3)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                    e.currentTarget.style.opacity = 1;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.borderColor = 'var(--glass-border)';
+                    e.currentTarget.style.background = 'var(--glass-bg)';
+                    e.currentTarget.style.opacity = 0.85;
+                  }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
-                    <div style={{ 
-                      width: '28px', 
-                      height: '28px', 
-                      borderRadius: '8px', 
-                      background: 'rgba(255,255,255,0.03)', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      color: 'var(--text-secondary)'
-                    }}>
-                      {getChannelIcon(r.channel)}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ 
+                          width: '32px', 
+                          height: '32px', 
+                          borderRadius: '8px', 
+                          background: chanGrad, 
+                          border: chanBorder,
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          color: chanColor,
+                          flexShrink: 0
+                        }}>
+                          {getChannelIcon(r.channel)}
+                        </div>
+                        {getStatusBadge(r.status)}
+                      </div>
+                      
+                      <button
+                        className="btn"
+                        style={{ padding: '6px', background: 'transparent', color: 'rgba(255, 255, 255, 0.3)', border: 'none', cursor: 'pointer', transition: 'color 0.2s' }}
+                        onClick={() => handleDelete(r.id)}
+                        title="Delete record"
+                        onMouseEnter={(e) => e.currentTarget.style.color = '#f87171'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.3)'}
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </div>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.title}
-                    </span>
+
+                    <div>
+                      <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }} title={r.title}>
+                        {r.title}
+                      </h4>
+                      {r.description && (
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
+                          {r.description}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{formatTime(r.remind_at)}</span>
-                    {getStatusBadge(r.status)}
-                    <button
-                      className="btn"
-                      style={{ padding: '6px', background: 'transparent', color: 'rgba(255,255,255,0.2)', border: 'none', cursor: 'pointer', transition: 'color 0.2s' }}
-                      onClick={() => handleDelete(r.id)}
-                      onMouseEnter={(e) => e.currentTarget.style.color = '#f87171'}
-                      onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.2)'}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                    <span style={{ 
+                      fontSize: '0.72rem', 
+                      color: 'var(--text-secondary)', 
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '5px', 
+                      fontWeight: 600,
+                      border: '1px solid rgba(255, 255, 255, 0.05)'
+                    }}>
+                      <Clock size={12} /> {formatTime(r.remind_at)}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -444,7 +505,7 @@ export default function RemindersView({ onRefresh }) {
       {loading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="skeleton-pulse skeleton-title" style={{ width: '180px', height: '18px' }} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
             {[1, 2, 3].map((i) => (
               <div key={i} className="skeleton-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

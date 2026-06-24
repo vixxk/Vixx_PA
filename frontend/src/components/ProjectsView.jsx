@@ -103,8 +103,7 @@ export default function ProjectsView({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div className="card-title-bar">
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Projects Portfolio</h2>
+      <div className="card-title-bar" style={{ justifyContent: 'flex-end' }}>
         <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
           <Plus size={16} /> New Project
         </button>
@@ -190,9 +189,9 @@ export default function ProjectsView({
                 transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
                 position: 'relative',
                 overflow: 'hidden',
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
-                backdropFilter: 'blur(10px)'
+                background: 'var(--glass-bg)',
+                border: '1px solid var(--glass-border)',
+                backdropFilter: 'var(--glass-blur)'
               }}
               onClick={() => setSelectedProject(proj)}
               onMouseEnter={(e) => {
@@ -203,7 +202,7 @@ export default function ProjectsView({
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
                 e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                e.currentTarget.style.borderColor = 'var(--glass-border)';
               }}
             >
               <div>

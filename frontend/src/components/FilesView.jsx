@@ -135,10 +135,6 @@ export default function FilesView({ projects = [], onRefresh }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div>
-        <h2 style={{ fontSize: '1.6rem', fontWeight: 700 }}>Workspace Pending Things & Contracts</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Track API keys, client documents, credentials, or custom information needed for each project.</p>
-      </div>
 
       {/* Creation Panel */}
       <div className="glass-panel" style={{ padding: '24px' }}>
