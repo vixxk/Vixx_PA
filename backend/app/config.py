@@ -2,6 +2,10 @@ import json
 from typing import List, Union
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
+
+# Populate os.environ with variables from .env
+load_dotenv()
 
 class Settings(BaseSettings):
     PORT: int = 8000

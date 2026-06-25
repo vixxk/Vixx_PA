@@ -36,7 +36,7 @@ async def list_reminders(
 ):
     stmt = select(Reminder).filter(
         Reminder.user_id == current_user.id
-    ).order_by(Reminder.remind_at.asc())
+    ).order_by(Reminder.created_at.desc())
     result = await db.execute(stmt)
     reminders = result.scalars().all()
     return [

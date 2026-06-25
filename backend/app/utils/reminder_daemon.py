@@ -50,7 +50,7 @@ async def process_due_reminders():
                 template_params = None
                 template_name = getattr(settings, "META_WHATSAPP_TEMPLATE_NAME", "")
                 
-                if template_name == "reminder_alert":
+                if template_name in ("reminder_alert", "reminder"):
                     local_remind_at = reminder.remind_at.astimezone()
                     due_date_str = local_remind_at.strftime('%b %d, %Y at %I:%M %p')
                     template_params = [reminder.title, due_date_str]
@@ -85,7 +85,9 @@ async def process_due_reminders():
                 user_res = await db.execute(user_stmt)
                 user = user_res.scalars().first()
                 if user:
-                    res = await send_email(user.email, f"Reminder: {reminder.title}", body)
+                    import os
+                    recipient_email = os.getenv("SMTP_USER") or user.email
+                    res = await send_email(recipient_email, f"Reminder: {reminder.title}", body)
                     if res.get("success"):
                         success = True
 

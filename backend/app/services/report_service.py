@@ -81,6 +81,7 @@ async def generate_report(
     """
     report_type = (report_data.get("report_type") or "").lower()
     project_title = report_data.get("project_title")
+    project_titles = report_data.get("project_titles") or []
     custom_filename = report_data.get("filename")
     raw_lower = raw_input.lower()
 
@@ -88,23 +89,62 @@ async def generate_report(
     if not report_type or report_type in ["auto", "general", "all", "everything", "full", "complete"]:
         report_type = _detect_report_type(raw_lower or report_type)
 
+    if report_type in ["project", "overview"]:
+        if "todo" in raw_lower or "task" in raw_lower or "tasks" in raw_lower:
+            report_type = "todo"
+        elif "payment" in raw_lower or "bill" in raw_lower or "invoice" in raw_lower:
+            report_type = "payments"
+        else:
+            report_type = "notepad"
+
     theme = next((t for t in ["teal", "emerald", "charcoal", "ruby", "dark"] if t in raw_lower), "navy")
     uid = uuid_mod.uuid4().hex[:8]
     os.makedirs("uploads", exist_ok=True)
 
-    # Resolve target project if specified
-    target_project = None
-    if project_title or "project" in raw_lower or "this" in raw_lower:
-        target_project = await resolve_project_from_context(db, user_id, raw_input, extracted_title=project_title, session_data=session_data)
+    # Resolve target projects
+    target_projects = []
+    
+    # 1. Check project_titles list
+    if project_titles:
+        if isinstance(project_titles, str):
+            project_titles = [t.strip() for t in project_titles.split(",") if t.strip()]
+        from app.services.entity_resolver import resolve_project
+        for title in project_titles:
+            p = await resolve_project(db, user_id, title)
+            if p:
+                target_projects.append(p)
+    # 2. Otherwise resolve project_title or extract from context
+    elif project_title or "project" in raw_lower or "this" in raw_lower:
+        from app.services.entity_resolver import resolve_project, resolve_project_from_context
+        temp_input = raw_input
+        filename_match = re.search(r'named\s+"([^"]+)"', temp_input, re.IGNORECASE)
+        if filename_match:
+            temp_input = temp_input.replace(filename_match.group(0), "")
+            
+        found_titles = re.findall(r'"([^"]+)"', temp_input)
+        if not found_titles:
+            project_match = re.search(r'projects?\s+([a-zA-Z0-9_\-\s,]+?)(?:\s+in\s+|\s+named\s+|$)', temp_input, re.IGNORECASE)
+            if project_match:
+                found_titles = [t.strip() for t in project_match.group(1).split(",") if t.strip() and t.strip().lower() not in ["all", "list", "projects"]]
+                
+        if len(found_titles) > 0:
+            for title in found_titles:
+                p = await resolve_project(db, user_id, title)
+                if p:
+                    target_projects.append(p)
+        else:
+            p = await resolve_project_from_context(db, user_id, raw_input, extracted_title=project_title, session_data=session_data)
+            if p:
+                target_projects.append(p)
 
     try:
         if report_type == "notepad":
-            return await _generate_notepad_report_flow(db, user_id, target_project, theme, uid, custom_filename)
+            return await _generate_notepad_report_flow(db, user_id, target_projects, theme, uid, custom_filename)
         elif report_type == "payments":
-            return await _generate_payments_report_flow(db, user_id, target_project, theme, uid, custom_filename)
+            return await _generate_payments_report_flow(db, user_id, target_projects, theme, uid, custom_filename)
         else:
             # Default to todo list report
-            return await _generate_todo_report_flow(db, user_id, target_project, theme, uid, custom_filename)
+            return await _generate_todo_report_flow(db, user_id, target_projects, theme, uid, custom_filename)
 
     except Exception as e:
         logger.exception("Error generating report PDF")
@@ -127,24 +167,37 @@ def _detect_report_type(raw_lower: str) -> str:
 async def _generate_notepad_report_flow(
     db: AsyncSession,
     user_id: UUID,
-    project: Optional[Project],
+    projects: list,
     theme: str,
     uid: str,
     custom_filename: Optional[str] = None
 ) -> str:
-    if not project:
-        # Get first project for user
-        proj_stmt = select(Project).filter(Project.user_id == user_id).limit(1)
-        project = (await db.execute(proj_stmt)).scalars().first()
-        if not project:
+    if not projects:
+        # Get all projects for user
+        proj_stmt = select(Project).filter(Project.user_id == user_id)
+        projects = (await db.execute(proj_stmt)).scalars().all()
+        if not projects:
             return "No projects found. Please create a project first before compiling its notepad."
 
-    raw_notes = project.notepad or ""
+    combined_notes_list = []
+    for p in projects:
+        if p.notepad and p.notepad.strip():
+            combined_notes_list.append(f"# Project: {p.title}\n\n{p.notepad}")
+
+    raw_notes = "\n\n---\n\n".join(combined_notes_list)
+    if not raw_notes.strip():
+        return "No notepad content found for the selected project(s)."
+
     formatted_notes = await _format_notepad_with_ai(raw_notes)
 
-    fname = _sanitize_filename(custom_filename, f"project_notepad_{project.title.lower().replace(' ', '_')}", uid)
+    title_suffix = "_".join([p.title.lower().replace(' ', '_') for p in projects[:3]])
+    if len(projects) > 3:
+        title_suffix += "_and_others"
+    fname = _sanitize_filename(custom_filename, f"project_notepad_{title_suffix}", uid)
+    
+    title_display = "Projects Notepad Compilation" if len(projects) > 1 else f"Project Notepad: {projects[0].title}"
     report = NotepadReport(fname, {
-        "title": f"Project Notepad: {project.title}",
+        "title": title_display,
         "subtitle": f"AI-Formatted Project Documentation | Generated: {datetime.now().day} {datetime.now().strftime('%B %Y')}",
         "theme": theme
     })
@@ -152,9 +205,10 @@ async def _generate_notepad_report_flow(
 
     base_fname = os.path.basename(fname)
     url = f"http://localhost:8000/uploads/{base_fname}"
+    proj_names = ", ".join([p.title for p in projects])
     return (
         f"### 📝 Project Notepad PDF Compiled!\n\n"
-        f"Project notes for **{project.title}** have been formatted and compiled using AI:\n"
+        f"Project notes for **{proj_names}** have been formatted and compiled using AI:\n"
         f"- **File Name**: `{base_fname}`\n"
         f"- **Source Characters**: {len(raw_notes)} chars\n"
         f"- **AI Formatted Sections**: Neat layout built with headers and bullet items\n\n"
@@ -165,17 +219,19 @@ async def _generate_notepad_report_flow(
 async def _generate_todo_report_flow(
     db: AsyncSession,
     user_id: UUID,
-    project: Optional[Project],
+    projects: list,
     theme: str,
     uid: str,
     custom_filename: Optional[str] = None
 ) -> str:
-    if project:
-        stmt = select(Todo, Project.title).join(Project).filter(Todo.project_id == project.id).order_by(Todo.status.desc(), Todo.due_date.asc())
+    if projects:
+        proj_ids = [p.id for p in projects]
+        stmt = select(Todo, Project.title).join(Project).filter(Todo.project_id.in_(proj_ids)).order_by(Todo.status.desc(), Todo.due_date.asc())
     else:
         # Fetch all projects for user
         proj_stmt = select(Project).filter(Project.user_id == user_id)
-        proj_ids = [p.id for p in (await db.execute(proj_stmt)).scalars().all()]
+        projects = (await db.execute(proj_stmt)).scalars().all()
+        proj_ids = [p.id for p in projects]
         if not proj_ids:
             return "No projects found to compile tasks backlog."
         stmt = select(Todo, Project.title).join(Project).filter(Todo.project_id.in_(proj_ids)).order_by(Todo.status.desc(), Todo.due_date.asc())
@@ -194,10 +250,16 @@ async def _generate_todo_report_flow(
             "actual_hours": float(t.actual_hours or 0)
         })
 
-    default_prefix = f"todo_list_{project.title.lower().replace(' ', '_')}" if project else "todo_list_all"
+    title_suffix = "_".join([p.title.lower().replace(' ', '_') for p in projects[:3]]) if len(projects) > 0 else "all"
+    if len(projects) > 3:
+        title_suffix += "_and_others"
+        
+    default_prefix = f"todo_list_{title_suffix}"
     fname = _sanitize_filename(custom_filename, default_prefix, uid)
+    
+    title_display = f"To Do List & Tasks Backlog" + (f" ({len(projects)} Projects)" if len(projects) > 1 else f": {projects[0].title}" if len(projects) == 1 else "")
     report = ToDoReport(fname, {
-        "title": f"To Do List & Tasks Backlog" + (f": {project.title}" if project else ""),
+        "title": title_display,
         "subtitle": f"Full Task Status Details | Generated: {datetime.now().day} {datetime.now().strftime('%B %Y')}",
         "theme": theme
     })
@@ -219,20 +281,24 @@ async def _generate_todo_report_flow(
 async def _generate_payments_report_flow(
     db: AsyncSession,
     user_id: UUID,
-    project: Optional[Project],
+    projects: list,
     theme: str,
     uid: str,
     custom_filename: Optional[str] = None
 ) -> str:
-    if project:
-        stmt = select(Payment, Project.title).join(Project).filter(Payment.project_id == project.id).order_by(Payment.due_date.asc())
+    if projects:
+        proj_ids = [p.id for p in projects]
+        stmt = select(Payment, Project.title).join(Project).filter(Payment.project_id.in_(proj_ids)).order_by(Payment.due_date.asc())
+        project_total = sum(float(p.total_amount or 0) for p in projects)
     else:
         # Fetch all projects for user
         proj_stmt = select(Project).filter(Project.user_id == user_id)
-        proj_ids = [p.id for p in (await db.execute(proj_stmt)).scalars().all()]
+        projects = (await db.execute(proj_stmt)).scalars().all()
+        proj_ids = [p.id for p in projects]
         if not proj_ids:
             return "No projects found to compile payment history."
         stmt = select(Payment, Project.title).join(Project).filter(Payment.project_id.in_(proj_ids)).order_by(Payment.due_date.asc())
+        project_total = sum(float(p.total_amount or 0) for p in projects)
 
     rows = (await db.execute(stmt)).all()
     payments_list = []
@@ -261,20 +327,16 @@ async def _generate_payments_report_flow(
 
     payments_list.sort(key=get_payment_date_str)
 
-    # Fetch project total amount
-    project_total = 0.0
-    if project:
-        project_total = float(project.total_amount or 0)
-    else:
-        proj_stmt = select(Project).filter(Project.user_id == user_id)
-        all_projects = (await db.execute(proj_stmt)).scalars().all()
-        project_total = sum(float(p.total_amount or 0) for p in all_projects)
-
-    default_prefix = f"payments_report_{project.title.lower().replace(' ', '_')}" if project else "payments_report_all"
+    title_suffix = "_".join([p.title.lower().replace(' ', '_') for p in projects[:3]]) if len(projects) > 0 else "all"
+    if len(projects) > 3:
+        title_suffix += "_and_others"
+        
+    default_prefix = f"payments_report_{title_suffix}"
     fname = _sanitize_filename(custom_filename, default_prefix, uid)
-    print(f"DEBUG: PaymentsReport class is {PaymentsReport}, MRO: {PaymentsReport.__mro__}")
+    
+    title_display = f"Payments & Billings Ledger" + (f" ({len(projects)} Projects)" if len(projects) > 1 else f": {projects[0].title}" if len(projects) == 1 else "")
     report = PaymentsReport(fname, {
-        "title": f"Payments & Billings Ledger" + (f": {project.title}" if project else ""),
+        "title": title_display,
         "subtitle": f"Full Financial Records Details | Generated: {datetime.now().day} {datetime.now().strftime('%B %Y')}",
         "theme": theme,
         "project_total_amount": project_total

@@ -66,7 +66,7 @@ async def process_ai_command(
             session_data["pending_delete_action"] = None
         else:
             session_data["pending_delete_action"] = None
-            cancel_msg = "Deletion cancelled."
+            cancel_msg = "Action cancelled."
             await memory_service.save_message(db, user_id, session_id, "user", raw_input)
             await memory_service.save_message(db, user_id, session_id, "assistant", cancel_msg)
             return _make_response({"intent": "clarify"}, summary=cancel_msg)
@@ -96,13 +96,6 @@ async def process_ai_command(
             else:
                 report_type = "todo"
                 
-            project_title = None
-            project_match = re.search(r'project\s+"([^"]+)"', raw_input, re.IGNORECASE)
-            if not project_match:
-                project_match = re.search(r'project\s+([a-zA-Z0-9_\-]+)', raw_input, re.IGNORECASE)
-            if project_match:
-                project_title = project_match.group(1).strip()
-                
             filename = None
             filename_match = re.search(r'named\s+"([^"]+)"', raw_input, re.IGNORECASE)
             if not filename_match:
@@ -116,9 +109,21 @@ async def process_ai_command(
                     theme = t
                     break
                     
+            # Parse multiple project titles if present
+            temp_input = raw_input
+            if filename_match:
+                temp_input = temp_input.replace(filename_match.group(0), "")
+                
+            project_titles = re.findall(r'"([^"]+)"', temp_input)
+            if not project_titles:
+                project_match = re.search(r'projects?\s+([a-zA-Z0-9_\-\s,]+?)(?:\s+in\s+|\s+named\s+|$)', temp_input, re.IGNORECASE)
+                if project_match:
+                    cleaned_titles = project_match.group(1).replace(" and ", ",")
+                    project_titles = [t.strip() for t in cleaned_titles.split(",") if t.strip() and t.strip().lower() not in ["all", "list", "projects"]]
+            
             report_data = {
                 "report_type": report_type,
-                "project_title": project_title,
+                "project_titles": project_titles,
                 "theme": theme,
                 "filename": filename
             }
@@ -354,7 +359,14 @@ async def _handle_project(db, user_id, final_state, initial_state, session_data,
                         logging.getLogger(__name__).info(f"Reverted accidental payment of {last_payment.amount} for project {proj.title} due to user correction: '{raw_input}'")
 
         result = await project_service.update_project(db, user_id, project_data, final_state)
-        p = result["project"]
+        if isinstance(result, dict) and result.get("needs_confirmation"):
+            session_data["pending_delete_action"] = final_state
+            final_state["needs_clarification"] = True
+            final_state["clarification_message"] = result["summary"]
+            session_data["pending_state"] = final_state
+            return result["summary"]
+
+        p = result.get("project")
         if p:
             session_data["last_project"] = {
                 "id": str(p.id), "title": p.title,

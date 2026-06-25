@@ -24,7 +24,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
     history = state.get("history") or []
 
     # Initialize containers
-    project_data = state.get("project") or {"title": None, "description": None, "total_amount": None}
+    project_data = state.get("project") or {"title": None, "description": None, "total_amount": None, "notepad": None}
     todos = state.get("todos") or []
     timeline = state.get("timeline") or []
     payment = state.get("payment") or {"action": "create", "project_title": None, "amount": None, "currency": "INR", "payment_type": "Advance", "received_date": None, "notes": None, "status": "pending"}
@@ -106,6 +106,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                 "  * If unclear → 'auto'\n"
                 "- project_title: which project to filter by (null if all projects)\n"
                 "  * IMPORTANT: If user says 'this' or 'that', check the conversation context above\n"
+                "- project_titles: list/array of project titles if user specifies multiple projects (null if not specified or all projects)\n"
                 "- theme: 'navy', 'teal', 'emerald', 'charcoal', 'ruby' (null if not specified)\n"
                 "- title: custom report title (null if not specified)\n"
                 "- filename: custom file name for the generated PDF. Strip any '.pdf' extension (null if not specified)\n\n"
@@ -143,7 +144,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                 f"Date Calculation Context:\n{date_context}\n"
                 f"User Intent: {intent}\n\n"
                 "Extract details based on the intent:\n"
-                "- For 'create_project': Extract action ('create', 'update', 'delete', 'clear', 'empty', 'read', 'list', 'query'), title, new_title (if renaming a project, e.g., 'rename X to Y' -> title='X', new_title='Y'), description, status (strictly one of the project status enum values: 'planning', 'developing', or 'finished'; map 'completed'/'active'/'done'/'on hold' to these accordingly), total_amount (budget or project value as a float/number). ALSO, if user mentions any initial or advance payment (e.g. 'advance payment of 5000 received on 14th June'), extract it into a nested 'payment' object with: 'amount' (float), 'currency' (default 'INR'), 'payment_type' (e.g. 'Advance'), 'status' ('received'), 'received_date' (date string), and 'notes'. If updating status or values of MULTIPLE projects at once (e.g. 'mark apniestate as finished and rest as developing'), extract a list/array under the 'updates' key, where each item in the array is an object with: 'title' (project name, or 'rest'/'others' to represent all other projects), and the properties to change (e.g., 'status', 'description', 'total_amount'). Example: 'mark apniestate as finished and rest as developing' -> action='update', updates=[{'title': 'apniestate', 'status': 'finished'}, {'title': 'rest', 'status': 'developing'}].\n"
+                "- For 'create_project': Extract action ('create', 'update', 'delete', 'clear', 'empty', 'read', 'list', 'query'), title, new_title (if renaming a project, e.g., 'rename X to Y' -> title='X', new_title='Y'), description, status (strictly one of the project status enum values: 'planning', 'developing', or 'finished'; map 'completed'/'active'/'done'/'on hold' to these accordingly), total_amount (budget or project value as a float/number), notepad (any notes, details, brief, notepad contents or updates). ALSO, if user mentions any initial or advance payment (e.g. 'advance payment of 5000 received on 14th June'), extract it into a nested 'payment' object with: 'amount' (float), 'currency' (default 'INR'), 'payment_type' (e.g. 'Advance'), 'status' ('received'), 'received_date' (date string), and 'notes'. If updating status or values of MULTIPLE projects at once (e.g. 'mark apniestate as finished and rest as developing'), extract a list/array under the 'updates' key, where each item in the array is an object with: 'title' (project name, or 'rest'/'others' to represent all other projects), and the properties to change (e.g., 'status', 'description', 'total_amount'). Example: 'mark apniestate as finished and rest as developing' -> action='update', updates=[{'title': 'apniestate', 'status': 'finished'}, {'title': 'rest', 'status': 'developing'}].\n"
                 "  IMPORTANT: For project titles, extract ONLY the actual name (e.g. 'Alpha project' → 'Alpha').\n"
                 "  IMPORTANT: If user wants to DELETE MULTIPLE projects, also extract 'exclude_names' as a list of project names to KEEP.\n"
                 "  Example: 'remove every project named acme except acme pdf project' → action='delete', title='acme', exclude_names=['acme pdf project']\n"
@@ -249,7 +250,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                         report[key] = extracted[key]
             elif intent == "create_project":
                 project_data["action"] = extracted.get("action") or "create"
-                for key in ["title", "new_title", "description", "total_amount", "status", "updates"]:
+                for key in ["title", "new_title", "description", "total_amount", "status", "notepad", "updates"]:
                     if extracted.get(key) is not None:
                         project_data[key] = extracted[key]
                 if extracted.get("exclude_names"):

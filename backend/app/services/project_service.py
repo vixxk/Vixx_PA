@@ -127,6 +127,8 @@ async def _format_project_details(db: AsyncSession, project: Project) -> str:
         msg += f"- **Kickoff Summary**: {project.summary}\n"
     if project.risks:
         msg += f"- **Identified Risks**: {project.risks}\n"
+    if project.notepad:
+        msg += f"- **Notepad**: {project.notepad}\n"
     msg += "\n"
 
     # Add Tasks
@@ -517,6 +519,27 @@ async def update_project(
             "summary": f"Successfully created project '{new_project.title}'."
         }
 
+    # Check if we are removing anything from the notepad
+    if "notepad" in project_data and project_data["notepad"] is not None:
+        old_notepad = project.notepad or ""
+        new_notepad = project_data["notepad"]
+        
+        is_removing = False
+        if old_notepad:
+            if not new_notepad.strip():
+                is_removing = True
+            elif len(new_notepad) < len(old_notepad):
+                is_removing = True
+                
+        if is_removing:
+            confirmed = final_state.get("confirmed_deletion", False)
+            if not confirmed:
+                return {
+                    "project": project,
+                    "needs_confirmation": True,
+                    "summary": f"⚠️ Are you sure you want to remove content from the notepad of project '{project.title}'? Reply with 'yes' or 'confirm' to proceed."
+                }
+
     # Update fields if provided
     summary_parts = []
     if "new_title" in project_data and project_data["new_title"] is not None:
@@ -541,6 +564,9 @@ async def update_project(
     if "deadline" in project_data and project_data["deadline"] is not None:
         project.deadline = _safe_parse_date(project_data["deadline"])
         summary_parts.append("deadline updated")
+    if "notepad" in project_data and project_data["notepad"] is not None:
+        project.notepad = project_data["notepad"]
+        summary_parts.append("notepad updated")
 
     await db.commit()
     await db.refresh(project)

@@ -25,6 +25,11 @@ export default function ChatInterface({ onRefreshData }) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          // Filter out default empty chats if there are other active chats
+          const activeHasMessages = parsed.filter(c => c.messages.length > 1 || c.title !== 'New Chat');
+          if (activeHasMessages.length > 0) {
+            return activeHasMessages;
+          }
           return parsed;
         }
       }
@@ -80,6 +85,20 @@ export default function ChatInterface({ onRefreshData }) {
       setActiveChatId(conversations[0].id);
     }
   }, [conversations, activeChatId]);
+
+  // Cleanup empty inactive chats when switching rooms
+  useEffect(() => {
+    setConversations(prev => {
+      if (prev.length <= 1) return prev;
+      const cleaned = prev.filter(c => 
+        c.id === activeChatId || 
+        c.messages.length > 1 || 
+        c.title !== 'New Chat'
+      );
+      if (cleaned.length === prev.length) return prev;
+      return cleaned;
+    });
+  }, [activeChatId]);
 
   // Active conversation helper
   const activeConv = conversations.find(c => c.id === activeChatId) || conversations[0] || { messages: [] };

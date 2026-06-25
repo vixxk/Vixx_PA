@@ -31,12 +31,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 async def get_current_user(
     db: AsyncSession = Depends(get_db)
 ) -> User:
-    result = await db.execute(select(User).filter(User.email == "default_user@example.com"))
+    import os
+    default_email = os.getenv("SMTP_USER") or "default_user@example.com"
+    result = await db.execute(select(User).filter(User.email == default_email))
     user = result.scalars().first()
     if user is None:
         user = User(
             name="Default Workspace User",
-            email="default_user@example.com",
+            email=default_email,
             password_hash="dummy_hash_bypassed"
         )
         db.add(user)

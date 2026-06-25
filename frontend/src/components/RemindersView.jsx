@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Plus, Trash2, Clock, Calendar, MessageSquare, Mail, X, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { Bell, Plus, Trash2, Clock, Calendar, MessageSquare, Mail, X, AlertCircle, CheckCircle2, XCircle, Search, SlidersHorizontal } from 'lucide-react';
 import { api } from '../services/api';
 
 export default function RemindersView({ onRefresh }) {
@@ -13,6 +13,8 @@ export default function RemindersView({ onRefresh }) {
   const [channel, setChannel] = useState('whatsapp');
   const [formLoading, setFormLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [channelFilter, setChannelFilter] = useState('all');
 
   const fetchReminders = async () => {
     setLoading(true);
@@ -89,17 +91,17 @@ export default function RemindersView({ onRefresh }) {
     });
   };
 
-  const handleClearAll = async () => {
-    window.showConfirm('Cancel all active reminders?', async () => {
+  const handleDeleteAll = async () => {
+    window.showConfirm('Are you sure you want to delete ALL reminders (both upcoming and history)? This cannot be undone.', async () => {
       const originalReminders = [...reminders];
-      setReminders(prev => prev.filter(r => r.status !== 'pending'));
+      setReminders([]);
       try {
         await api.reminders.clear();
         fetchReminders();
         if (onRefresh) onRefresh();
       } catch (err) {
         setReminders(originalReminders);
-        alert('Failed to clear reminders: ' + err.message);
+        alert('Failed to delete reminders: ' + err.message);
       }
     });
   };
@@ -117,8 +119,25 @@ export default function RemindersView({ onRefresh }) {
     return <span className="badge" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', fontSize: '0.68rem' }}><Clock size={10} /> Pending</span>;
   };
 
-  const pending = reminders.filter(r => r.status === 'pending');
-  const past = reminders.filter(r => r.status !== 'pending');
+  const filteredReminders = reminders.filter(r => {
+    const matchesSearch = 
+      r.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (r.description && r.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    let matchesChannel = false;
+    if (channelFilter === 'all') {
+      matchesChannel = true;
+    } else if (channelFilter === 'whatsapp') {
+      matchesChannel = r.channel === 'whatsapp' || r.channel === 'both';
+    } else if (channelFilter === 'email') {
+      matchesChannel = r.channel === 'email' || r.channel === 'both';
+    }
+
+    return matchesSearch && matchesChannel;
+  });
+
+  const pending = filteredReminders.filter(r => r.status === 'pending');
+  const past = filteredReminders.filter(r => r.status !== 'pending');
 
   const formatTime = (iso) => {
     if (!iso) return 'N/A';
@@ -135,9 +154,35 @@ export default function RemindersView({ onRefresh }) {
     <div className="reminders-view-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div className="card-title-bar" style={{ justifyContent: 'flex-end', gap: '10px' }}>
         <div style={{ display: 'flex', gap: '10px' }}>
-          {pending.length > 0 && (
-            <button className="btn btn-secondary" onClick={handleClearAll} style={{ fontSize: '0.78rem', padding: '8px 14px' }}>
-              Cancel All
+          {reminders.length > 0 && (
+            <button 
+              className="btn btn-secondary" 
+              onClick={handleDeleteAll} 
+              style={{ 
+                fontSize: '0.78rem', 
+                padding: '8px 14px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                backgroundColor: 'rgba(239, 68, 68, 0.08)', 
+                color: '#f87171', 
+                borderColor: 'rgba(239, 68, 68, 0.2)',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.25s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.16)';
+                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                e.currentTarget.style.color = '#ef4444';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.08)';
+                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+                e.currentTarget.style.color = '#f87171';
+              }}
+            >
+              <Trash2 size={14} /> Delete All
             </button>
           )}
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -145,6 +190,121 @@ export default function RemindersView({ onRefresh }) {
           </button>
         </div>
       </div>
+
+      {/* Sleek Search & Filter Bar */}
+      {reminders.length > 0 && (
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'row', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          gap: '16px', 
+          width: '100%',
+          flexWrap: 'wrap',
+          background: 'rgba(255, 255, 255, 0.01)',
+          border: '1px solid var(--glass-border)',
+          borderRadius: '16px',
+          padding: '12px 16px',
+          backdropFilter: 'blur(10px)',
+        }}>
+          {/* Search Input Container */}
+          <div style={{ 
+            position: 'relative', 
+            display: 'flex', 
+            alignItems: 'center', 
+            flex: 1, 
+            minWidth: '280px' 
+          }}>
+            <Search 
+              size={15} 
+              style={{ 
+                position: 'absolute', 
+                left: '14px', 
+                color: 'var(--text-muted)',
+                pointerEvents: 'none'
+              }} 
+            />
+            <input
+              type="text"
+              placeholder="Search reminders by title or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ 
+                width: '100%', 
+                padding: '10px 14px 10px 40px', 
+                fontSize: '0.85rem',
+                borderRadius: '10px',
+                background: 'rgba(0, 0, 0, 0.2)',
+                border: '1px solid var(--glass-border)',
+                outline: 'none',
+                color: 'var(--text-primary)',
+                transition: 'all 0.25s ease',
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+                e.target.style.boxShadow = '0 0 10px rgba(139, 92, 246, 0.15)';
+                e.target.style.background = 'rgba(0, 0, 0, 0.3)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'var(--glass-border)';
+                e.target.style.boxShadow = 'none';
+                e.target.style.background = 'rgba(0, 0, 0, 0.2)';
+              }}
+            />
+          </div>
+
+          {/* Filter Pills Group */}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            background: 'rgba(0, 0, 0, 0.25)', 
+            border: '1px solid var(--glass-border)', 
+            padding: '3px', 
+            borderRadius: '10px',
+            gap: '2px'
+          }}>
+            {[
+              { id: 'all', label: 'All', icon: <SlidersHorizontal size={13} /> },
+              { id: 'whatsapp', label: 'WhatsApp', icon: <MessageSquare size={13} style={{ color: '#25D366' }} /> },
+              { id: 'email', label: 'Email', icon: <Mail size={13} style={{ color: '#60a5fa' }} /> }
+            ].map(pill => {
+              const isActive = channelFilter === pill.id;
+              return (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setChannelFilter(pill.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: isActive ? 'rgba(139, 92, 246, 0.15)' : 'transparent',
+                    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    border: isActive ? '1px solid rgba(139, 92, 246, 0.25)' : '1px solid transparent',
+                    boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.2)' : 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  {pill.icon}
+                  {pill.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Create Reminder Form */}
       {showForm && (

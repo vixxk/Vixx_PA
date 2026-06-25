@@ -19,7 +19,7 @@ import { api } from '../services/api';
 export default function ReportsEngineView({ projects = [] }) {
   const [reportType, setReportType] = useState('todo');
   const [theme, setTheme] = useState('navy');
-  const [projectId, setProjectId] = useState('');
+  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const [sinceDate, setSinceDate] = useState('');
   const [customFilename, setCustomFilename] = useState('');
 
@@ -27,11 +27,12 @@ export default function ReportsEngineView({ projects = [] }) {
   const [result, setResult] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
 
+  // Initialize selectedProjectIds to all projects on load or when projects change
   useEffect(() => {
-    if (reportType === 'notepad' && !projectId && projects.length > 0) {
-      setProjectId(projects[0].id);
+    if (projects.length > 0 && selectedProjectIds.length === 0) {
+      setSelectedProjectIds(projects.map(p => p.id));
     }
-  }, [reportType, projectId, projects]);
+  }, [projects]);
 
   const reportTypes = [
     { id: 'notepad', name: 'Project Notepad', icon: FileText, desc: 'AI-formatted compilation of raw project notes and briefs.' },
@@ -48,6 +49,24 @@ export default function ReportsEngineView({ projects = [] }) {
     { id: 'dark', color: '#0f172a', name: 'Premium Dark' }
   ];
 
+  const handleToggleProject = (id) => {
+    setSelectedProjectIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(item => item !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedProjectIds.length === projects.length) {
+      setSelectedProjectIds([]);
+    } else {
+      setSelectedProjectIds(projects.map(p => p.id));
+    }
+  };
+
   const handleGenerate = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -56,9 +75,18 @@ export default function ReportsEngineView({ projects = [] }) {
 
     // Build command for AI router
     let projectTitle = '';
-    if (projectId) {
-      const selected = projects.find(p => p.id === projectId);
-      if (selected) projectTitle = `for project "${selected.title}"`;
+    if (selectedProjectIds.length > 0) {
+      if (selectedProjectIds.length === projects.length) {
+        projectTitle = 'for all projects';
+      } else {
+        const titles = projects
+          .filter(p => selectedProjectIds.includes(p.id))
+          .map(p => `"${p.title}"`)
+          .join(', ');
+        projectTitle = `for projects ${titles}`;
+      }
+    } else {
+      projectTitle = 'for all projects';
     }
 
     let nameFilter = '';
@@ -146,19 +174,75 @@ export default function ReportsEngineView({ projects = [] }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
             {/* Project Context */}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Filter Project</label>
-              <select
-                className="input-field"
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                style={{ width: '100%' }}
-              >
-                {reportType !== 'notepad' && <option value="">-- All Projects --</option>}
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.title}</option>
-                ))}
-              </select>
+            <div className="form-group" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="form-label" style={{ margin: 0 }}>Filter Projects</label>
+                {projects.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSelectAll}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent-primary)',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+                    onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                  >
+                    {selectedProjectIds.length === projects.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                )}
+              </div>
+              <div style={{
+                maxHeight: '120px',
+                overflowY: 'auto',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                background: 'rgba(0, 0, 0, 0.25)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}>
+                {projects.length === 0 ? (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No projects available</span>
+                ) : (
+                  projects.map(p => {
+                    const isChecked = selectedProjectIds.includes(p.id);
+                    return (
+                      <label
+                        key={p.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          fontSize: '0.8rem',
+                          color: isChecked ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggleProject(p.id)}
+                          style={{
+                            cursor: 'pointer',
+                            accentColor: 'var(--accent-primary)',
+                          }}
+                        />
+                        {p.title}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             {/* Theme Palette */}
