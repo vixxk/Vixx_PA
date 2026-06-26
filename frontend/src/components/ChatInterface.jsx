@@ -13,7 +13,9 @@ import {
   Trash2,
   Pencil,
   Check,
-  X
+  X,
+  Mic,
+  Square
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -44,7 +46,7 @@ export default function ChatInterface({ onRefreshData }) {
           {
             id: 'welcome',
             sender: 'assistant',
-            text: "Hi! I'm Vixx, your Personal Assistant. You can manage projects, schedule WhatsApp/email reminders (e.g. 'remind me to call John tomorrow at 10am'), log payments, or manage your to-do lists.",
+            text: "Hi! I'm Vixx, your Personal Assistant. You can manage projects, schedule SMS/email reminders (e.g. 'remind me to call John tomorrow at 10am'), log payments, or manage your to-do lists.",
             type: 'normal'
           }
         ],
@@ -125,7 +127,7 @@ export default function ChatInterface({ onRefreshData }) {
         {
           id: 'welcome',
           sender: 'assistant',
-          text: "Hi! I'm Vixx, your Personal Assistant. You can manage projects, schedule WhatsApp/email reminders (e.g. 'remind me to call John tomorrow at 10am'), log payments, or manage your to-do lists.",
+          text: "Hi! I'm Vixx, your Personal Assistant. You can manage projects, schedule SMS/email reminders (e.g. 'remind me to call John tomorrow at 10am'), log payments, or manage your to-do lists.",
           type: 'normal'
         }
       ],
@@ -150,7 +152,7 @@ export default function ChatInterface({ onRefreshData }) {
                 {
                   id: 'welcome',
                   sender: 'assistant',
-                  text: "Hi! I'm Vixx, your Personal Assistant. You can manage projects, schedule WhatsApp/email reminders (e.g. 'remind me to call John tomorrow at 10am'), log payments, or manage your to-do lists.",
+                  text: "Hi! I'm Vixx, your Personal Assistant. You can manage projects, schedule SMS/email reminders (e.g. 'remind me to call John tomorrow at 10am'), log payments, or manage your to-do lists.",
                   type: 'normal'
                 }
               ],
@@ -433,8 +435,102 @@ export default function ChatInterface({ onRefreshData }) {
                                lastMessage.sender === 'assistant' && 
                                (lastMessage.text.includes('⚠️') || lastMessage.text.toLowerCase().includes('are you sure') || lastMessage.text.toLowerCase().includes('confirm to proceed'));
 
+  // Audio Recording States & Refs
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  const startRecording = async () => {
+    if (loading || isConfirmationActive) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        // Cleanup recording stream tracks
+        stream.getTracks().forEach(track => track.stop());
+
+        // Call backend transcription API
+        setLoading(true);
+        try {
+          if (window.showToast) window.showToast('Transcribing audio...', 'info');
+          const res = await api.ai.transcribe(audioBlob);
+          if (res && res.text) {
+            setInput(res.text);
+            if (window.showToast) window.showToast('Audio transcribed successfully!', 'success');
+          } else {
+            if (window.showToast) window.showToast('Could not transcribe audio.', 'error');
+          }
+        } catch (err) {
+          if (window.showToast) window.showToast(`Transcription error: ${err.message}`, 'error');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      // Start a duration timer
+      timerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      if (window.showToast) {
+        window.showToast('Microphone access denied or not available.', 'error');
+      } else {
+        alert('Microphone access denied or not available.');
+      }
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
   return (
     <div className="glass-panel chat-container" style={{ display: 'flex', flexDirection: 'row', height: '600px', overflow: 'hidden' }}>
+      <style>{`
+        @keyframes recordPulse {
+          0% { opacity: 0.4; transform: scale(0.95); }
+          50% { opacity: 1; transform: scale(1.15); }
+          100% { opacity: 0.4; transform: scale(0.95); }
+        }
+        .pulse-dot {
+          animation: recordPulse 1.5s infinite ease-in-out;
+        }
+      `}</style>
       
       {/* 2. Sleek Conversation Sidebar */}
       <div className="chat-sidebar" style={{
@@ -1015,29 +1111,78 @@ export default function ChatInterface({ onRefreshData }) {
         )}
 
         <form onSubmit={handleSend} className="chat-input-container">
-          <div className="chat-input-wrapper">
-            <textarea
-              className="chat-input"
-              placeholder={isConfirmationActive ? "Please select Yes or No above..." : "Type a natural language command..."}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={loading || isConfirmationActive}
-              rows={1}
-              style={{
-                resize: 'none',
-                overflowY: 'auto',
-                minHeight: '20px',
-                maxHeight: '120px',
-                fontFamily: 'inherit',
-                paddingTop: '10px',
-                paddingBottom: '10px',
-                opacity: isConfirmationActive ? 0.6 : 1
-              }}
-            />
-            <button type="submit" className="btn btn-primary" style={{ padding: '8px 16px', alignSelf: 'flex-end', marginBottom: '4px' }} disabled={loading || isConfirmationActive}>
-              <Send size={16} />
-            </button>
+          <div className="chat-input-wrapper" style={{ alignItems: 'center' }}>
+            {isRecording ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 4px' }}>
+                <span className="pulse-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+                <span style={{ fontSize: '0.9rem', color: '#ef4444', fontWeight: 600 }}>
+                  Recording audio... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                </span>
+              </div>
+            ) : (
+              <textarea
+                className="chat-input"
+                placeholder={isConfirmationActive ? "Please select Yes or No above..." : "Type a natural language command..."}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={loading || isConfirmationActive}
+                rows={1}
+                style={{
+                  resize: 'none',
+                  overflowY: 'auto',
+                  minHeight: '20px',
+                  maxHeight: '120px',
+                  fontFamily: 'inherit',
+                  paddingTop: '10px',
+                  paddingBottom: '10px',
+                  opacity: isConfirmationActive ? 0.6 : 1
+                }}
+              />
+            )}
+            
+            <div style={{ display: 'flex', gap: '8px', alignSelf: 'flex-end', marginBottom: '4px' }}>
+              {isRecording ? (
+                <button 
+                  type="button" 
+                  onClick={stopRecording} 
+                  className="btn" 
+                  style={{ 
+                    padding: '8px 12px', 
+                    background: 'rgba(239, 68, 68, 0.15)', 
+                    color: '#f87171', 
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '8px',
+                    cursor: 'pointer' 
+                  }}
+                >
+                  <Square size={16} fill="#ef4444" />
+                </button>
+              ) : (
+                <button 
+                  type="button" 
+                  onClick={startRecording} 
+                  className="btn btn-secondary" 
+                  style={{ 
+                    padding: '8px 12px', 
+                    cursor: 'pointer',
+                    borderRadius: '8px',
+                    borderColor: 'rgba(255,255,255,0.08)',
+                    opacity: (loading || isConfirmationActive) ? 0.5 : 1
+                  }}
+                  disabled={loading || isConfirmationActive}
+                  title="Record voice message"
+                >
+                  <Mic size={16} />
+                </button>
+              )}
+
+              {!isRecording && (
+                <button type="submit" className="btn btn-primary" style={{ padding: '8px 16px' }} disabled={loading || isConfirmationActive}>
+                  <Send size={16} />
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </div>

@@ -8,7 +8,7 @@ Phase 3: Now uses memory_service for persistent conversations instead of
 volatile in-memory session_store.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any, Optional
 from uuid import UUID
@@ -18,6 +18,7 @@ from app.models.user import User
 from app.schemas.ai import AIProcessRequest, AIProcessResponse, AIFeedbackRequest
 from app.utils.auth_helper import get_current_user
 from app.graphs.workflow import app_workflow
+from app.config import settings
 
 # Domain services
 from app.services import project_service, task_service, payment_service
@@ -26,6 +27,69 @@ from app.services import report_service
 from app.services import memory_service
 
 router = APIRouter(prefix="/ai", tags=["AI Orchestrator"])
+
+
+@router.post("/transcribe")
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Transcribes audio to text using Groq's Whisper API.
+    """
+    if not settings.GROQ_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GROQ_API_KEY is not configured. Please add it to your .env file."
+        )
+
+    # Read audio bytes
+    audio_bytes = await file.read()
+    filename = file.filename or "recording.webm"
+    content_type = file.content_type or "audio/webm"
+
+    import httpx
+    headers = {
+        "Authorization": f"Bearer {settings.GROQ_API_KEY}"
+    }
+
+    async with httpx.AsyncClient() as client:
+        files = {
+            "file": (filename, audio_bytes, content_type)
+        }
+        data = {
+            "model": "whisper-large-v3"
+        }
+        try:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers=headers,
+                files=files,
+                data=data,
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                detail_msg = f"Groq Whisper transcription failed: {response.text}"
+                try:
+                    error_json = response.json()
+                    if "error" in error_json and "message" in error_json["error"]:
+                        detail_msg = error_json["error"]["message"]
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=detail_msg
+                )
+                
+            res_data = response.json()
+            return {"text": res_data.get("text", "")}
+            
+        except httpx.RequestError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Network error communicating with Groq: {str(e)}"
+            )
 
 
 @router.post("/process", response_model=AIProcessResponse)

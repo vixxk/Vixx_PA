@@ -78,7 +78,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                 "- title: what the reminder is about. Strip generic terms like 'reminder'.\n"
                 "- description: optional extra detail\n"
                 "- remind_at: ISO 8601 datetime. Parse relative times using the Date Context above.\n"
-                "- channel: 'sms', 'email', or 'both' (default 'sms')\n\n"
+                "- channel: 'sms', 'email', or 'both'. IMPORTANT: Only extract 'both' if the user explicitly requests to receive the reminder on BOTH channels (e.g. 'both', 'via sms and email', etc.). Otherwise, default to 'sms' (or extract 'email' if they explicitly mentioned email only).\n\n"
                 "Respond ONLY with a JSON object."
             )
         elif intent == "generate_report":

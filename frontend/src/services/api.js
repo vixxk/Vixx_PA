@@ -291,6 +291,19 @@ export const api = {
       });
       return handleResponse(response);
     },
+    transcribe: async (audioBlob) => {
+      const headers = getHeaders();
+      delete headers['Content-Type'];
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'recording.webm');
+      
+      const response = await fetch(`${API_BASE_URL}/ai/transcribe`, {
+        method: 'POST',
+        headers: headers,
+        body: formData,
+      });
+      return handleResponse(response);
+    },
     feedback: async (rating, feedbackText = null) => {
       const response = await fetch(`${API_BASE_URL}/ai/feedback`, {
         method: 'POST',

@@ -36,6 +36,7 @@ import FilesView from './components/FilesView';
 import IntegrationsView from './components/IntegrationsView';
 import PaymentsView from './components/PaymentsView';
 import ReportsEngineView from './components/ReportsEngineView';
+import DashboardAnalytics from './components/DashboardAnalytics';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(true);
@@ -91,6 +92,7 @@ export default function App() {
   const [projects, setProjects] = useState([]);
   const [todos, setTodos] = useState([]);
   const [events, setEvents] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [sheetLinks, setSheetLinks] = useState({ payments_url: null });
   const [remindersCount, setRemindersCount] = useState(0);
   const [pendingThingsCount, setPendingThingsCount] = useState(0);
@@ -151,13 +153,14 @@ export default function App() {
     if (!isAuthenticated) return;
     setLoadingData(true);
     try {
-      const [projList, todoList, eventList, links, reminderList, pendingList] = await Promise.all([
+      const [projList, todoList, eventList, links, reminderList, pendingList, paymentList] = await Promise.all([
         api.projects.list().catch(err => { console.error("Error listing projects:", err); return []; }),
         api.todos.list().catch(err => { console.error("Error listing todos:", err); return []; }),
         api.timeline.list().catch(err => { console.error("Error listing timeline:", err); return []; }),
         api.sync.getSheetsLinks().catch(() => ({ payments_url: null })),
         api.reminders.list().catch(() => []),
-        api.pendingThings.list().catch(() => [])
+        api.pendingThings.list().catch(() => []),
+        api.payments.list().catch(err => { console.error("Error listing payments:", err); return []; })
       ]);
       setProjects(projList || []);
       setTodos(todoList || []);
@@ -165,6 +168,7 @@ export default function App() {
       setSheetLinks(links || { payments_url: null });
       setRemindersCount(reminderList ? reminderList.filter(r => r.status === 'pending').length : 0);
       setPendingThingsCount(pendingList ? pendingList.filter(p => !p.is_completed).length : 0);
+      setPayments(paymentList || []);
     } catch (err) {
       console.error("Error loading dashboard data:", err);
     } finally {
@@ -457,6 +461,9 @@ export default function App() {
             {/* Chat interface in the middle */}
             <ChatInterface onRefreshData={fetchData} />
 
+            {/* Dashboard Analytics charts */}
+            <DashboardAnalytics projects={projects} payments={payments} />
+
             {/* Stats Cards at the bottom */}
             <DashboardStats 
               projects={projects} 
@@ -477,58 +484,63 @@ export default function App() {
               <ChatInterface onRefreshData={fetchData} />
             </div>
 
-            <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', height: 'fit-content' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 600, margin: 0 }}>Active Projects</h3>
-                <button
-                  onClick={() => fetchData()}
-                  disabled={loadingData}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '6px',
-                    borderRadius: '50%',
-                    transition: 'all 0.2s',
-                  }}
-                  className="refresh-btn"
-                  title="Refresh Projects"
-                >
-                  <RotateCw 
-                    size={16} 
-                    className={loadingData ? 'animate-spin' : ''} 
-                    style={{ transition: 'transform 0.2s' }}
-                  />
-                </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', height: 'fit-content' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 600, margin: 0 }}>Active Projects</h3>
+                  <button
+                    onClick={() => fetchData()}
+                    disabled={loadingData}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '6px',
+                      borderRadius: '50%',
+                      transition: 'all 0.2s',
+                    }}
+                    className="refresh-btn"
+                    title="Refresh Projects"
+                  >
+                    <RotateCw 
+                      size={16} 
+                      className={loadingData ? 'animate-spin' : ''} 
+                      style={{ transition: 'transform 0.2s' }}
+                    />
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {loadingData ? (
+                    [1, 2, 3].map(i => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
+                        <div className="skeleton-pulse" style={{ width: '55%', height: '14px', borderRadius: '4px' }} />
+                        <div className="skeleton-pulse" style={{ width: '25%', height: '14px', borderRadius: '4px' }} />
+                      </div>
+                    ))
+                  ) : projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length === 0 ? (
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>No active projects found.</p>
+                  ) : (
+                    projects.filter(p => p.status !== 'completed' && p.status !== 'finished').slice(0, 5).map(p => (
+                      <div 
+                        key={p.id} 
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '8px', cursor: 'pointer' }}
+                        onClick={() => {
+                          window.location.hash = `#/projects/${p.id}`;
+                        }}
+                      >
+                        <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.title}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {loadingData ? (
-                  [1, 2, 3].map(i => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
-                      <div className="skeleton-pulse" style={{ width: '55%', height: '14px', borderRadius: '4px' }} />
-                      <div className="skeleton-pulse" style={{ width: '25%', height: '14px', borderRadius: '4px' }} />
-                    </div>
-                  ))
-                ) : projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length === 0 ? (
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>No active projects found.</p>
-                ) : (
-                  projects.filter(p => p.status !== 'completed' && p.status !== 'finished').slice(0, 5).map(p => (
-                    <div 
-                      key={p.id} 
-                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '8px', cursor: 'pointer' }}
-                      onClick={() => {
-                        window.location.hash = `#/projects/${p.id}`;
-                      }}
-                    >
-                      <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.title}</span>
-                    </div>
-                  ))
-                )}
-              </div>
+
+              {/* Dashboard Analytics charts */}
+              <DashboardAnalytics projects={projects} payments={payments} />
             </div>
           </div>
         )}
