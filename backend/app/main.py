@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 
-# Initialize FastAPI App
+# Initialize FastAPI App (Reloader touched)
 app = FastAPI(
     title="Personal Assistant API",
     description="Backend API for Personal Assistant incorporating LangGraph agentic workflows and PostgreSQL CRUD.",

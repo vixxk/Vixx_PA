@@ -27,7 +27,7 @@ INTENT_KEYWORDS = {
     ],
     "set_reminder": [
         "remind", "reminder", "reminders", "alarm", "alert me", "notify me",
-        "notification", "schedule reminder", "ping me",
+        "notification", "schedule reminder", "ping me", "sms me", "text me",
     ],
     "track_pending": [
         "pending", "credentials", "api keys", "client needs to send",

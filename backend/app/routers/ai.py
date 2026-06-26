@@ -225,7 +225,13 @@ async def process_ai_command(
     session_data["pending_state"] = None
     await memory_service.delete_session_state(db, user_id, session_id)
     raw_summary = summary_msg or final_state.get("summary") or "Action processed."
-    filtered_summary = await _filter_and_format_response(raw_input, raw_summary, history)
+    filtered_summary = await _filter_and_format_response(
+        raw_input=raw_input,
+        system_response=raw_summary,
+        history=history,
+        local_time=request.local_time,
+        timezone_offset=request.timezone_offset
+    )
     final_state["summary"] = filtered_summary
 
     # Save to persistent memory with entity extraction
@@ -593,7 +599,13 @@ async def log_feedback(
     return {"success": True, "message": "Feedback submitted successfully."}
 
 
-async def _filter_and_format_response(raw_input: str, system_response: str, history: list = None) -> str:
+async def _filter_and_format_response(
+    raw_input: str,
+    system_response: str,
+    history: list = None,
+    local_time: str = None,
+    timezone_offset: int = None
+) -> str:
     """
     Feedback and filtering layer: passes the raw database/domain output through the LLM 
     to filter and format it according to the user's instructions and constraints.
@@ -601,8 +613,24 @@ async def _filter_and_format_response(raw_input: str, system_response: str, hist
     try:
         from app.utils.llm import get_llm
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+        import dateutil.parser
+        from datetime import datetime, timezone as dt_timezone, timedelta
         
         llm = get_llm()
+        
+        local_dt = None
+        if local_time:
+            try:
+                local_dt = dateutil.parser.parse(local_time)
+                if local_dt.tzinfo is not None and timezone_offset is not None:
+                    user_tz = dt_timezone(timedelta(minutes=-timezone_offset))
+                    local_dt = local_dt.astimezone(user_tz)
+            except Exception:
+                pass
+        if not local_dt:
+            local_dt = datetime.now()
+            
+        date_context = f"Current User Local Datetime: {local_dt.strftime('%Y-%m-%d %I:%M:%S %p')} ({local_dt.strftime('%A')})"
         
         # Format history context
         history_msgs = []
@@ -618,15 +646,17 @@ async def _filter_and_format_response(raw_input: str, system_response: str, hist
             "You are Vixx, the Personal Assistant. "
             "Your task is to review the user's query and the raw system/database data, "
             "and generate the final response to the user.\n\n"
+            f"Date Context:\n- {date_context}\n\n"
             "CRITICAL INSTRUCTIONS:\n"
             "1. You MUST satisfy all the formatting constraints requested by the user in their query "
             "(e.g., if they ask 'just tell me all project names nothing else', list ONLY the names and NO description/tasks/payments/etc.).\n"
-            "2. Never hallucinate or add any projects, tasks, or transactions that are NOT in the raw system data.\n"
-            "3. If the raw data is empty, or states no data is found, mention that politely.\n"
-            "4. Keep the response clean, readable, and professional using Markdown.\n"
-            "5. Keep any links, file paths, numbers, and critical action results (like status or success/failure messages) completely intact.\n"
-            "6. All monetary amounts are ALWAYS in Indian Rupees (INR / ₹). Never use dollars ($), USD, or any other currency. Never convert amounts between currencies. If the user says '10000', it means ₹10,000 — not dollars.\n"
-            "7. When listing tasks/todos, you MUST always include the project name in parentheses/brackets next to the task title (e.g., '(Project: Hyrego)') for every task listed, ensuring no task is left without its project name."
+            "2. Never override or modify the dates/times, status, or IDs returned in the raw system/database response. Keep them completely intact as the source of truth.\n"
+            "3. Never hallucinate or add any projects, tasks, or transactions that are NOT in the raw system data.\n"
+            "4. If the raw data is empty, or states no data is found, mention that politely.\n"
+            "5. Keep the response clean, readable, and professional using Markdown.\n"
+            "6. Keep any links, file paths, numbers, and critical action results (like status or success/failure messages) completely intact.\n"
+            "7. All monetary amounts are ALWAYS in Indian Rupees (INR / ₹). Never use dollars ($), USD, or any other currency. Never convert amounts between currencies. If the user says '10000', it means ₹10,000 — not dollars.\n"
+            "8. When listing tasks/todos, you MUST always include the project name in parentheses/brackets next to the task title (e.g., '(Project: Hyrego)') for every task listed, ensuring no task is left without its project name."
         )
         
         prompt_content = (

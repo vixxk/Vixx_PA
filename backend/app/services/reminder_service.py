@@ -20,7 +20,8 @@ async def list_reminders(db, user_id):
     msg = "### ⏰ Active Reminders:\n\n"
     for r in reminders:
         time_str = r.remind_at.strftime("%b %d, %Y at %I:%M %p") if r.remind_at else "N/A"
-        msg += f"- 📧 **{r.title}** — {time_str}\n"
+        ch_emoji = "📱" if r.channel == "sms" else "📧" if r.channel == "email" else "📱📧"
+        msg += f"- {ch_emoji} **{r.title}** — {time_str}\n"
         if r.description: msg += f"  _{r.description}_\n"
     return msg
 
@@ -36,13 +37,26 @@ async def create_reminder(db, user_id, reminder_data, timezone_offset=None):
         except: pass
     if not remind_at:
         return {"needs_clarification": True, "message": "I couldn't parse the time. Please specify when you want to be reminded (e.g., 'tomorrow at 9am', 'June 20 at 3pm')."}
-    new_reminder = Reminder(user_id=user_id, title=reminder_data["title"], description=reminder_data.get("description"),
-                            remind_at=remind_at, channel="email", status="pending")
+    
+    channel = reminder_data.get("channel") or "sms"
+    if channel not in ("sms", "email", "both"):
+        channel = "sms"
+
+    new_reminder = Reminder(
+        user_id=user_id, 
+        title=reminder_data["title"], 
+        description=reminder_data.get("description"),
+        remind_at=remind_at, 
+        channel=channel, 
+        status="pending"
+    )
     db.add(new_reminder)
     await db.commit()
     await db.refresh(new_reminder)
+    
     time_str = local_remind_at.strftime("%b %d, %Y at %I:%M %p")
-    return {"needs_clarification": False, "message": f"✅ Reminder set: **{new_reminder.title}** on {time_str} via Email."}
+    ch_label = "SMS" if new_reminder.channel == "sms" else "Email" if new_reminder.channel == "email" else "SMS & Email"
+    return {"needs_clarification": False, "message": f"✅ Reminder set: **{new_reminder.title}** on {time_str} via {ch_label}."}
 
 
 async def cancel_reminder(db, user_id, title):

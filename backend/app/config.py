@@ -32,7 +32,12 @@ class Settings(BaseSettings):
     # GitHub Sync
     GITHUB_ACCESS_TOKEN: str = ""
     GITHUB_CLIENT_ID: str = ""
-    GITHUB_CLIENT_SECRET: str = ""
+
+    # Twilio SMS API
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_PHONE_NUMBER: str = ""
+    USER_SMS_NUMBER: str = "+917253648994"
 
 
     # CORS Origins

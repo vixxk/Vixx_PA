@@ -13,7 +13,7 @@ class Reminder(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     remind_at = Column(DateTime(timezone=True), nullable=False)
-    channel = Column(String(50), nullable=False, default="email")  # 'email'
+    channel = Column(String(50), nullable=False, default="sms")  # 'sms', 'email', 'both'
     status = Column(String(50), nullable=False, default="pending")    # 'pending', 'sent', 'failed', 'cancelled'
     sent_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

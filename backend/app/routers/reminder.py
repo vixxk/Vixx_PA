@@ -18,7 +18,7 @@ class ReminderCreate(BaseModel):
     title: str
     description: Optional[str] = None
     remind_at: str  # ISO format datetime string
-    channel: Optional[str] = "email"  # 'email'
+    channel: Optional[str] = "sms"  # 'sms', 'email', 'both'
 
 
 class ReminderUpdate(BaseModel):
@@ -73,7 +73,7 @@ async def create_reminder(
         title=data.title,
         description=data.description,
         remind_at=remind_at,
-        channel=data.channel or "email",
+        channel=data.channel or "sms",
         status="pending"
     )
     db.add(reminder)
@@ -161,3 +161,26 @@ async def clear_reminders(
         await db.delete(r)
     await db.commit()
     return {"success": True, "message": f"Cleared {count} reminders."}
+
+
+@router.post("/test-sms")
+async def test_sms_delivery(
+    current_user: User = Depends(get_current_user),
+):
+    """Diagnostic endpoint — sends a test SMS via Twilio to verify config."""
+    from app.config import settings
+    from app.utils.notification_helper import send_sms
+
+    to_number = settings.USER_SMS_NUMBER
+    result = await send_sms(
+        to_number,
+        "🔧 Diagnostic test SMS from Vixx Personal Assistant."
+    )
+    return {
+        "sms_result": result,
+        "config": {
+            "account_sid": settings.TWILIO_ACCOUNT_SID[:10] + "..." if settings.TWILIO_ACCOUNT_SID else "(empty)",
+            "phone_number": settings.TWILIO_PHONE_NUMBER,
+            "to": to_number,
+        },
+    }

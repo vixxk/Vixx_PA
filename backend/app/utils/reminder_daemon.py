@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from sqlalchemy.future import select
 from app.database import AsyncSessionLocal
 from app.models.reminder import Reminder
-from app.utils.notification_helper import send_email
+from app.utils.notification_helper import send_email, send_sms
+from app.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ async def process_due_reminders():
         reminders = result.scalars().all()
 
         for idx, reminder in enumerate(reminders, 1):
-            logger.info(f"Processing reminder {idx}/{len(reminders)}: '{reminder.title}'")
+            logger.info(f"Processing reminder {idx}/{len(reminders)}: '{reminder.title}' (channel={reminder.channel})")
             body = f"⏰ *REMINDER*: {reminder.title}"
             if reminder.description:
                 body += f"\n📝 {reminder.description}"
@@ -41,18 +42,27 @@ async def process_due_reminders():
             body += f"\n🕐 Scheduled: {local_remind_at.strftime('%b %d, %Y at %I:%M %p')}"
 
             success = False
+            channel = reminder.channel or "sms"
 
-            # Get user email from relationship
-            from app.models.user import User
-            user_stmt = select(User).filter(User.id == reminder.user_id)
-            user_res = await db.execute(user_stmt)
-            user = user_res.scalars().first()
-            if user:
-                import os
-                recipient_email = os.getenv("SMTP_USER") or user.email
-                res = await send_email(recipient_email, f"Reminder: {reminder.title}", body)
+            if channel in ("sms", "both"):
+                to_number = settings.USER_SMS_NUMBER
+                res = await send_sms(to_number, body)
                 if res.get("success"):
                     success = True
+                    logger.info(f"SMS reminder sent: {reminder.title}")
+
+            if channel in ("email", "both"):
+                # Get user email from relationship
+                from app.models.user import User
+                user_stmt = select(User).filter(User.id == reminder.user_id)
+                user_res = await db.execute(user_stmt)
+                user = user_res.scalars().first()
+                if user:
+                    import os
+                    recipient_email = os.getenv("SMTP_USER") or user.email
+                    res = await send_email(recipient_email, f"Reminder: {reminder.title}", body)
+                    if res.get("success"):
+                        success = True
 
             reminder.status = "sent" if success else "failed"
             reminder.sent_at = now
