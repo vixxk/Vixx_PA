@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy.future import select
 from app.database import AsyncSessionLocal
 from app.models.reminder import Reminder
-from app.utils.notification_helper import send_whatsapp, send_email
-from app.config import settings
+from app.utils.notification_helper import send_email
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,8 @@ async def process_due_reminders():
         result = await db.execute(stmt)
         reminders = result.scalars().all()
 
-        for reminder in reminders:
+        for idx, reminder in enumerate(reminders, 1):
+            logger.info(f"Processing reminder {idx}/{len(reminders)}: '{reminder.title}'")
             body = f"⏰ *REMINDER*: {reminder.title}"
             if reminder.description:
                 body += f"\n📝 {reminder.description}"
@@ -41,59 +41,23 @@ async def process_due_reminders():
             body += f"\n🕐 Scheduled: {local_remind_at.strftime('%b %d, %Y at %I:%M %p')}"
 
             success = False
-            channel = reminder.channel or "whatsapp"
 
-            if channel in ("whatsapp", "both"):
-                to_number = settings.USER_WHATSAPP_NUMBER
-                
-                # Format parameters for specific template layouts
-                template_params = None
-                template_name = getattr(settings, "META_WHATSAPP_TEMPLATE_NAME", "")
-                
-                if template_name in ("reminder_alert", "reminder"):
-                    local_remind_at = reminder.remind_at.astimezone()
-                    due_date_str = local_remind_at.strftime('%b %d, %Y at %I:%M %p')
-                    template_params = [reminder.title, due_date_str]
-                elif template_name in ("reminder_task", "templated"):
-                    local_remind_at = reminder.remind_at.astimezone()
-                    due_date_str = local_remind_at.strftime('%b %d, %Y at %I:%M %p')
-                    template_params = [
-                        reminder.title,
-                        reminder.description or "No description provided",
-                        due_date_str
-                    ]
-                elif template_name == "jaspers_market_order_confirmation_v1":
-                    local_remind_at = reminder.remind_at.astimezone()
-                    due_date_str = local_remind_at.strftime('%b %d, %Y at %I:%M %p')
-                    template_params = ["Vixx! ⏰ REMINDER", reminder.title, due_date_str]
-                    
-                import re
-                url_match = re.search(r'(https?://\S+)', reminder.description or '')
-                if not url_match:
-                    url_match = re.search(r'(https?://\S+)', reminder.title or '')
-                button_url = url_match.group(1) if url_match else None
-                    
-                res = await send_whatsapp(to_number, body, template_params=template_params, button_url=button_url)
+            # Get user email from relationship
+            from app.models.user import User
+            user_stmt = select(User).filter(User.id == reminder.user_id)
+            user_res = await db.execute(user_stmt)
+            user = user_res.scalars().first()
+            if user:
+                import os
+                recipient_email = os.getenv("SMTP_USER") or user.email
+                res = await send_email(recipient_email, f"Reminder: {reminder.title}", body)
                 if res.get("success"):
                     success = True
-                    logger.info(f"WhatsApp reminder sent: {reminder.title}")
-
-            if channel in ("email", "both"):
-                # Get user email from relationship
-                from app.models.user import User
-                user_stmt = select(User).filter(User.id == reminder.user_id)
-                user_res = await db.execute(user_stmt)
-                user = user_res.scalars().first()
-                if user:
-                    import os
-                    recipient_email = os.getenv("SMTP_USER") or user.email
-                    res = await send_email(recipient_email, f"Reminder: {reminder.title}", body)
-                    if res.get("success"):
-                        success = True
 
             reminder.status = "sent" if success else "failed"
             reminder.sent_at = now
+            logger.info(f"Reminder '{reminder.title}' marked as {reminder.status}")
 
         if reminders:
             await db.commit()
-            logger.info(f"Processed {len(reminders)} due reminder(s).")
+            logger.info(f"✅ Processed {len(reminders)} due reminder(s).")

@@ -18,7 +18,7 @@ class ReminderCreate(BaseModel):
     title: str
     description: Optional[str] = None
     remind_at: str  # ISO format datetime string
-    channel: Optional[str] = "whatsapp"  # 'whatsapp', 'email', 'both'
+    channel: Optional[str] = "email"  # 'email'
 
 
 class ReminderUpdate(BaseModel):
@@ -73,7 +73,7 @@ async def create_reminder(
         title=data.title,
         description=data.description,
         remind_at=remind_at,
-        channel=data.channel or "whatsapp",
+        channel=data.channel or "email",
         status="pending"
     )
     db.add(reminder)

@@ -20,8 +20,7 @@ async def list_reminders(db, user_id):
     msg = "### ⏰ Active Reminders:\n\n"
     for r in reminders:
         time_str = r.remind_at.strftime("%b %d, %Y at %I:%M %p") if r.remind_at else "N/A"
-        ch_emoji = "📱" if r.channel == "whatsapp" else "📧" if r.channel == "email" else "📱📧"
-        msg += f"- {ch_emoji} **{r.title}** — {time_str}\n"
+        msg += f"- 📧 **{r.title}** — {time_str}\n"
         if r.description: msg += f"  _{r.description}_\n"
     return msg
 
@@ -38,13 +37,12 @@ async def create_reminder(db, user_id, reminder_data, timezone_offset=None):
     if not remind_at:
         return {"needs_clarification": True, "message": "I couldn't parse the time. Please specify when you want to be reminded (e.g., 'tomorrow at 9am', 'June 20 at 3pm')."}
     new_reminder = Reminder(user_id=user_id, title=reminder_data["title"], description=reminder_data.get("description"),
-                            remind_at=remind_at, channel=reminder_data.get("channel") or "whatsapp", status="pending")
+                            remind_at=remind_at, channel="email", status="pending")
     db.add(new_reminder)
     await db.commit()
     await db.refresh(new_reminder)
     time_str = local_remind_at.strftime("%b %d, %Y at %I:%M %p")
-    ch_label = "WhatsApp" if new_reminder.channel == "whatsapp" else "Email" if new_reminder.channel == "email" else "WhatsApp & Email"
-    return {"needs_clarification": False, "message": f"✅ Reminder set: **{new_reminder.title}** on {time_str} via {ch_label}."}
+    return {"needs_clarification": False, "message": f"✅ Reminder set: **{new_reminder.title}** on {time_str} via Email."}
 
 
 async def cancel_reminder(db, user_id, title):

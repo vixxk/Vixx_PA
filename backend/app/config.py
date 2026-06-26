@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
 # Populate os.environ with variables from .env
-load_dotenv()
+load_dotenv(override=True)
 
 class Settings(BaseSettings):
     PORT: int = 8000
@@ -34,13 +34,6 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""
 
-    # Meta WhatsApp Cloud API
-    META_WHATSAPP_ACCESS_TOKEN: str = ""
-    META_WHATSAPP_PHONE_NUMBER_ID: str = ""
-    META_WHATSAPP_VERSION: str = "v20.0"
-    USER_WHATSAPP_NUMBER: str = "+91XXXXXXXXXX"
-    META_WHATSAPP_TEMPLATE_NAME: str = ""
-    META_WHATSAPP_TEMPLATE_LANG: str = "en_US"
 
     # CORS Origins
     CORS_ORIGINS: Union[str, List[str]] = ["http://localhost:5173", "http://127.0.0.1:5173"]

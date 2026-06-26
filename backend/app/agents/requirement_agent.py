@@ -28,7 +28,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
     todos = state.get("todos") or []
     timeline = state.get("timeline") or []
     payment = state.get("payment") or {"action": "create", "project_title": None, "amount": None, "currency": "INR", "payment_type": "Advance", "received_date": None, "notes": None, "status": "pending"}
-    reminder = state.get("reminder") or {"action": "create", "title": None, "description": None, "remind_at": None, "channel": "whatsapp"}
+    reminder = state.get("reminder") or {"action": "create", "title": None, "description": None, "remind_at": None, "channel": "email"}
     pending = state.get("pending") or {"action": "create", "title": None, "description": None, "project_title": None, "is_completed": False}
     report = state.get("report") or {"report_type": None, "project_title": None, "theme": None, "title": None}
     client = state.get("client") or {"action": "create", "name": None, "email": None, "phone": None, "company": None, "notes": None, "priority_score": None}
@@ -78,7 +78,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                 "- title: what the reminder is about. Strip generic terms like 'reminder'.\n"
                 "- description: optional extra detail\n"
                 "- remind_at: ISO 8601 datetime. Parse relative times using the Date Context above.\n"
-                "- channel: 'whatsapp', 'email', or 'both' (default 'whatsapp')\n\n"
+                "- channel: 'email' (default 'email')\n\n"
                 "Respond ONLY with a JSON object."
             )
         elif intent == "generate_report":
