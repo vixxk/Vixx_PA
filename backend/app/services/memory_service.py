@@ -363,3 +363,100 @@ async def get_session_count(db: AsyncSession, user_id: UUID, session_id: UUID) -
     )
     result = await db.execute(stmt)
     return result.scalar() or 0
+
+
+async def rename_session(db: AsyncSession, user_id: UUID, session_id: UUID, title: str):
+    """Rename a conversation session by upserting a system-level metadata record."""
+    stmt = select(ConversationLog).filter(
+        ConversationLog.user_id == user_id,
+        ConversationLog.session_id == session_id,
+        ConversationLog.role == "system",
+        ConversationLog.intent == "session_title"
+    )
+    result = await db.execute(stmt)
+    log = result.scalars().first()
+    if log:
+        log.content = title
+    else:
+        log = ConversationLog(
+            user_id=user_id,
+            session_id=session_id,
+            role="system",
+            intent="session_title",
+            content=title
+        )
+        db.add(log)
+    await db.commit()
+
+
+async def delete_session(db: AsyncSession, user_id: UUID, session_id: UUID):
+    """Delete all logs and metadata associated with a session ID."""
+    from app.models.session_summary import SessionSummary
+    from app.models.session_state import SessionState
+    
+    # Delete logs
+    log_stmt = select(ConversationLog).filter(
+        ConversationLog.user_id == user_id,
+        ConversationLog.session_id == session_id
+    )
+    logs = (await db.execute(log_stmt)).scalars().all()
+    for log in logs:
+        await db.delete(log)
+        
+    # Delete summary
+    sum_stmt = select(SessionSummary).filter(
+        SessionSummary.user_id == user_id,
+        SessionSummary.session_id == session_id
+    )
+    sums = (await db.execute(sum_stmt)).scalars().all()
+    for s in sums:
+        await db.delete(s)
+        
+    # Delete state
+    state_stmt = select(SessionState).filter(
+        SessionState.user_id == user_id,
+        SessionState.session_id == session_id
+    )
+    states = (await db.execute(state_stmt)).scalars().all()
+    for st in states:
+        await db.delete(st)
+        
+    await db.commit()
+
+
+async def get_all_sessions(db: AsyncSession, user_id: UUID) -> List[Dict[str, Any]]:
+    """Retrieve all user sessions grouped by session ID, ordered by creation time."""
+    stmt = (
+        select(ConversationLog)
+        .filter(ConversationLog.user_id == user_id)
+        .order_by(ConversationLog.created_at.asc())
+    )
+    result = await db.execute(stmt)
+    logs = result.scalars().all()
+    
+    sessions_dict = {}
+    for log in logs:
+        s_id = str(log.session_id)
+        if s_id not in sessions_dict:
+            sessions_dict[s_id] = {
+                "id": s_id,
+                "title": "New Session",
+                "messages": [],
+                "createdAt": log.created_at.isoformat() if log.created_at else datetime.now().isoformat()
+            }
+            
+        if log.role == "system" and log.intent == "session_title":
+            sessions_dict[s_id]["title"] = log.content
+        else:
+            sessions_dict[s_id]["messages"].append({
+                "id": str(log.id),
+                "sender": log.role,
+                "text": log.content,
+                "type": "normal",
+                "reasoningSteps": log.entities.get("reasoningSteps") if log.entities and isinstance(log.entities, dict) else []
+            })
+            
+    # Return as list sorted by creation time or last activity (e.g. descending)
+    sessions_list = list(sessions_dict.values())
+    sessions_list.sort(key=lambda x: x["createdAt"], reverse=True)
+    return sessions_list

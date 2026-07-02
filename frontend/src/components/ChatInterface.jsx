@@ -15,11 +15,21 @@ import {
   Check,
   X,
   Mic,
-  Square
+  Square,
+  Paperclip,
+  Calendar,
+  CreditCard,
+  Folder,
+  User,
+  Clock,
+  ArrowRight,
+  TrendingUp,
+  Volume2,
+  Menu
 } from 'lucide-react';
 import { api } from '../services/api';
 
-export default function ChatInterface({ onRefreshData }) {
+export default function ChatInterface({ projects = [], todos = [], payments = [], onRefreshData }) {
   // 1. Local Storage Persistent State
   const [conversations, setConversations] = useState(() => {
     try {
@@ -27,26 +37,23 @@ export default function ChatInterface({ onRefreshData }) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Filter out default empty chats if there are other active chats
           const activeHasMessages = parsed.filter(c => c.messages.length > 1 || c.title !== 'New Chat');
-          if (activeHasMessages.length > 0) {
-            return activeHasMessages;
-          }
+          if (activeHasMessages.length > 0) return activeHasMessages;
           return parsed;
         }
       }
     } catch (e) {
-      console.error("Error reading conversations from local storage:", e);
+      console.error("Error reading conversations:", e);
     }
     return [
       {
         id: 'default',
-        title: 'New Chat',
+        title: 'System Boot Chat',
         messages: [
           {
             id: 'welcome',
             sender: 'assistant',
-            text: "Hi! I'm Vixx, your Personal Assistant. You can manage projects, schedule SMS/email reminders (e.g. 'remind me to call John tomorrow at 10am'), log payments, or manage your to-do lists.",
+            text: "Welcome to Vixx Workspace. I am your resident AI agent. Ask me to draft proposals, schedule WhatsApp rules (e.g. 'schedule alert for payments'), track financials, or prioritize active sprint checklists.",
             type: 'normal'
           }
         ],
@@ -57,10 +64,7 @@ export default function ChatInterface({ onRefreshData }) {
 
   const [activeChatId, setActiveChatId] = useState(() => {
     const savedActive = localStorage.getItem('vixx_active_chat_id');
-    if (savedActive) {
-      return savedActive;
-    }
-    return 'default';
+    return savedActive || 'default';
   });
 
   const [input, setInput] = useState('');
@@ -70,7 +74,47 @@ export default function ChatInterface({ onRefreshData }) {
   const [editingTitle, setEditingTitle] = useState('');
   const editInputRef = useRef(null);
   const messagesEndRef = useRef(null);
-  const [mobileRoomsDropdownOpen, setMobileRoomsDropdownOpen] = useState(false);
+  const chatMessagesRef = useRef(null);
+  
+  // Selected Project Context state (Default to 'all' projects)
+  const [selectedContextId, setSelectedContextId] = useState('all');
+  
+  // Custom dropdown and sidebar toggle states
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [chatCopied, setChatCopied] = useState(false);
+
+  const handleCopyText = (text, msgId) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMessageId(msgId);
+    setTimeout(() => {
+      setCopiedMessageId(null);
+    }, 2000);
+  };
+
+  const handleCopyWholeChat = () => {
+    if (!messages || messages.length === 0) return;
+    const textTranscript = messages.map(msg => {
+      const senderName = msg.sender === 'user' ? 'User' : 'Vixx';
+      return `${senderName}: ${msg.text}`;
+    }).join('\n\n');
+    
+    navigator.clipboard.writeText(textTranscript);
+    setChatCopied(true);
+    setTimeout(() => {
+      setChatCopied(false);
+    }, 2000);
+  };
+
+  // Voice Mode interface state
+  const [voiceModeActive, setVoiceModeActive] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const timerRef = useRef(null);
 
   // Sync to localStorage
   useEffect(() => {
@@ -81,28 +125,45 @@ export default function ChatInterface({ onRefreshData }) {
     localStorage.setItem('vixx_active_chat_id', activeChatId);
   }, [activeChatId]);
 
-  // Ensure activeChatId is valid
+  // Handle click outside custom dropdown
   useEffect(() => {
-    if (conversations.length > 0 && !conversations.some(c => c.id === activeChatId)) {
-      setActiveChatId(conversations[0].id);
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Load sessions from database on mount
+  useEffect(() => {
+    const fetchDbSessions = async () => {
+      try {
+        const dbSessions = await api.ai.listSessions();
+        if (Array.isArray(dbSessions) && dbSessions.length > 0) {
+          setConversations(dbSessions);
+          const savedActive = localStorage.getItem('vixx_active_chat_id');
+          if (savedActive && dbSessions.some(c => c.id === savedActive)) {
+            setActiveChatId(savedActive);
+          } else {
+            setActiveChatId(dbSessions[0].id);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching sessions from database:", err);
+      }
+    };
+    fetchDbSessions();
+  }, []);
+
+  // Set default project context
+  useEffect(() => {
+    if (!selectedContextId) {
+      setSelectedContextId('all');
     }
-  }, [conversations, activeChatId]);
+  }, [selectedContextId]);
 
-  // Cleanup empty inactive chats when switching rooms
-  useEffect(() => {
-    setConversations(prev => {
-      if (prev.length <= 1) return prev;
-      const cleaned = prev.filter(c => 
-        c.id === activeChatId || 
-        c.messages.length > 1 || 
-        c.title !== 'New Chat'
-      );
-      if (cleaned.length === prev.length) return prev;
-      return cleaned;
-    });
-  }, [activeChatId]);
-
-  // Active conversation helper
   const activeConv = conversations.find(c => c.id === activeChatId) || conversations[0] || { messages: [] };
   const messages = activeConv.messages;
 
@@ -122,12 +183,12 @@ export default function ChatInterface({ onRefreshData }) {
     const newId = 'chat_' + Date.now();
     const newChat = {
       id: newId,
-      title: 'New Chat',
+      title: 'New Session',
       messages: [
         {
           id: 'welcome',
           sender: 'assistant',
-          text: "Hi! I'm Vixx, your Personal Assistant. You can manage projects, schedule SMS/email reminders (e.g. 'remind me to call John tomorrow at 10am'), log payments, or manage your to-do lists.",
+          text: "Vixx AI memory ready. Ask me to list invoices, track schedules, or prioritize backlog sprints.",
           type: 'normal'
         }
       ],
@@ -138,7 +199,13 @@ export default function ChatInterface({ onRefreshData }) {
   };
 
   const handleDeleteChat = (id) => {
-    window.showConfirm("Are you sure you want to delete this conversation?", () => {
+    window.showConfirm("Delete this workspace conversation history?", async () => {
+      try {
+        await api.ai.deleteSession(id);
+      } catch (err) {
+        console.error("Error deleting session in DB:", err);
+      }
+
       setConversations(prev => {
         const filtered = prev.filter(c => c.id !== id);
         if (filtered.length === 0) {
@@ -147,12 +214,12 @@ export default function ChatInterface({ onRefreshData }) {
           return [
             {
               id: newDefaultId,
-              title: 'New Chat',
+              title: 'New Session',
               messages: [
                 {
                   id: 'welcome',
                   sender: 'assistant',
-                  text: "Hi! I'm Vixx, your Personal Assistant. You can manage projects, schedule SMS/email reminders (e.g. 'remind me to call John tomorrow at 10am'), log payments, or manage your to-do lists.",
+                  text: "Vixx AI memory ready. Ask me to list invoices, track schedules, or prioritize backlog sprints.",
                   type: 'normal'
                 }
               ],
@@ -168,18 +235,18 @@ export default function ChatInterface({ onRefreshData }) {
     });
   };
 
-  const handleStartRename = (e, conv) => {
-    e.stopPropagation();
-    setEditingChatId(conv.id);
-    setEditingTitle(conv.title);
-    setTimeout(() => editInputRef.current?.focus(), 50);
-  };
-
-  const handleSaveRename = () => {
+  const handleSaveRename = async () => {
     if (editingChatId && editingTitle.trim()) {
+      const newTitle = editingTitle.trim();
+      try {
+        await api.ai.renameSession(editingChatId, newTitle);
+      } catch (err) {
+        console.error("Error renaming session in DB:", err);
+      }
+
       setConversations(prev =>
         prev.map(c =>
-          c.id === editingChatId ? { ...c, title: editingTitle.trim() } : c
+          c.id === editingChatId ? { ...c, title: newTitle } : c
         )
       );
     }
@@ -187,172 +254,39 @@ export default function ChatInterface({ onRefreshData }) {
     setEditingTitle('');
   };
 
-  const handleCancelRename = () => {
-    setEditingChatId(null);
-    setEditingTitle('');
-  };
-
-  const handleCopyChat = () => {
-    const formattedText = messages
-      .map(msg => {
-        const prefix = msg.sender === 'assistant' ? 'AI' : 'User';
-        return `${prefix}:\n${msg.text}`;
-      })
-      .join('\n\n');
-    
-    navigator.clipboard.writeText(formattedText)
-      .then(() => { if (window.showToast) window.showToast('Conversation copied to clipboard', 'success'); })
-      .catch(err => { if (window.showToast) window.showToast('Failed to copy: ' + err.message, 'error'); });
-  };
-
-  const renderFormattedText = (text) => {
-    if (!text) return null;
-    
-    const formatBold = (str) => {
-      const parts = str.split(/\*\*(.*?)\*\*/g);
-      return parts.map((part, index) => {
-        if (index % 2 === 1) {
-          return <strong key={index} style={{ fontWeight: '700', color: 'inherit' }}>{part}</strong>;
-        }
-        return part;
-      });
-    };
-
-    const parseLineContent = (str) => {
-      if (!str) return null;
-      
-      const linkRegex = /\[(.*?)\]\((.*?)\)/;
-      const match = str.match(linkRegex);
-      
-      if (match) {
-        const label = match[1];
-        const url = match[2];
-        const before = str.substring(0, match.index);
-        const after = str.substring(match.index + match[0].length);
-        
-        const cleanBefore = before.replace(/[📥\s\-\*•]+/g, '').trim();
-        const cleanAfter = after.trim();
-        const isPdf = url.toLowerCase().endsWith('.pdf') || url.includes('/uploads/');
-        
-        return (
-          <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start', margin: '4px 0' }}>
-            {cleanBefore && <span style={{ display: 'block', fontSize: '0.92rem' }}>{formatBold(before)}</span>}
-            {isPdf ? (
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-primary"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  textDecoration: 'none',
-                  fontSize: '0.85rem',
-                  fontWeight: '600',
-                  marginTop: '4px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)',
-                  background: 'linear-gradient(135deg, var(--accent-primary) 0%, #7c3aed 100%)',
-                  border: 'none',
-                  color: 'white',
-                  transition: 'transform 0.2s'
-                }}
-                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-              >
-                <Download size={14} /> {label}
-              </a>
-            ) : (
-              <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-primary)', textDecoration: 'underline' }}>
-                {label}
-              </a>
-            )}
-            {cleanAfter && <span style={{ display: 'block', fontSize: '0.92rem' }}>{formatBold(after)}</span>}
-          </div>
-        );
-      }
-      
-      return formatBold(str);
-    };
-
-    const normalizedText = text.replace(/ \/\/\/ /g, '\n').replace(/\/\/\//g, '\n');
-    const lines = normalizedText.split('\n');
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {lines.map((line, idx) => {
-          const trimmed = line.trim();
-          if (!trimmed) {
-            return <div key={idx} style={{ height: '6px' }} />;
-          }
-
-          // Horizontal rule
-          if (/^-{3,}$/.test(trimmed) || /^\*{3,}$/.test(trimmed) || /^_{3,}$/.test(trimmed)) {
-            return <hr key={idx} style={{ border: 'none', borderTop: '1px solid rgba(255, 255, 255, 0.12)', margin: '8px 0' }} />;
-          }
-
-          if (trimmed.startsWith('###')) {
-            return (
-              <h4 key={idx} style={{ fontSize: '1.05rem', fontWeight: 600, marginTop: '12px', marginBottom: '4px', color: 'var(--text-primary)' }}>
-                {parseLineContent(trimmed.substring(3).trim())}
-              </h4>
-            );
-          }
-          if (trimmed.startsWith('##')) {
-            return (
-              <h3 key={idx} style={{ fontSize: '1.15rem', fontWeight: 600, marginTop: '14px', marginBottom: '6px', color: 'var(--text-primary)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '4px' }}>
-                {parseLineContent(trimmed.substring(2).trim())}
-              </h3>
-            );
-          }
-          if (trimmed.startsWith('#')) {
-            return (
-              <h2 key={idx} style={{ fontSize: '1.3rem', fontWeight: 700, marginTop: '16px', marginBottom: '8px', color: 'var(--text-primary)' }}>
-                {parseLineContent(trimmed.substring(1).trim())}
-              </h2>
-            );
-          }
-
-          if (trimmed.startsWith('-') || (trimmed.startsWith('*') && !trimmed.startsWith('**'))) {
-            return (
-              <div key={idx} style={{ display: 'flex', gap: '8px', paddingLeft: '12px', fontSize: '0.9rem', lineHeight: '1.5', alignItems: 'flex-start' }}>
-                <span style={{ color: 'var(--text-secondary)', marginTop: '2px', opacity: 0.8 }}>•</span>
-                <span>{parseLineContent(trimmed.substring(1).trim())}</span>
-              </div>
-            );
-          }
-
-          return (
-            <p key={idx} style={{ margin: 0, fontSize: '0.92rem', lineHeight: '1.5', color: 'inherit' }}>
-              {parseLineContent(line)}
-            </p>
-          );
-        })}
-      </div>
-    );
+  const toggleThoughts = (msgId) => {
+    setExpandedThoughts(prev => ({
+      ...prev,
+      [msgId]: !prev[msgId]
+    }));
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTo({
+        top: chatMessagesRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+    const timer = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timer);
+  }, [messages, loading, expandedThoughts]);
 
   const sendMessage = async (userText) => {
     setLoading(true);
-
-    // Append user message AND optionally update title if it's "New Chat"
     setConversations(prevConvs => {
       return prevConvs.map(c => {
         if (c.id === activeChatId) {
           let newTitle = c.title;
-          if (c.title === "New Chat") {
-            newTitle = userText.length > 25 ? userText.substring(0, 22) + "..." : userText;
+          if (c.title === "New Session" || c.title === "New Chat") {
+            newTitle = userText.length > 20 ? userText.substring(0, 18) + "..." : userText;
+            api.ai.renameSession(c.id, newTitle).catch(e => console.error("Auto-rename failed in DB:", e));
           }
           return {
             ...c,
@@ -368,7 +302,6 @@ export default function ChatInterface({ onRefreshData }) {
     });
 
     try {
-      // Process with LangGraph backend
       const googleToken = localStorage.getItem('google_token');
       const response = await api.ai.process(userText, googleToken, activeChatId);
       const responseMsgId = (Date.now() + 1).toString();
@@ -391,12 +324,11 @@ export default function ChatInterface({ onRefreshData }) {
           {
             id: responseMsgId,
             sender: 'assistant',
-            text: response.summary || "Action processed successfully.",
+            text: response.summary || "Action executed successfully.",
             type: 'success',
             reasoningSteps: response.reasoning_steps
           }
         ]);
-        // Trigger dashboard stats/data refresh
         if (onRefreshData) onRefreshData();
       }
     } catch (error) {
@@ -405,7 +337,7 @@ export default function ChatInterface({ onRefreshData }) {
         {
           id: Date.now().toString(),
           sender: 'assistant',
-          text: `Error processing request: ${error.message || 'Config keys missing.'}`,
+          text: `Configuration issue: ${error.message || 'Check your keys.'}`,
           type: 'error'
         }
       ]);
@@ -417,73 +349,40 @@ export default function ChatInterface({ onRefreshData }) {
   const handleSend = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!input.trim() || loading) return;
-
     const userText = input.trim();
     setInput('');
     await sendMessage(userText);
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend(e);
-    }
-  };
-
-  const lastMessage = messages[messages.length - 1];
-  const isConfirmationActive = !loading && lastMessage && 
-                               lastMessage.sender === 'assistant' && 
-                               (lastMessage.text.includes('⚠️') || lastMessage.text.toLowerCase().includes('are you sure') || lastMessage.text.toLowerCase().includes('confirm to proceed'));
-
-  // Audio Recording States & Refs
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const timerRef = useRef(null);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, []);
-
-  const startRecording = async () => {
-    if (loading || isConfirmationActive) return;
+  // Voice recording handlers
+  const startVoiceRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
-      
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
       
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
       };
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        
-        // Cleanup recording stream tracks
         stream.getTracks().forEach(track => track.stop());
-
-        // Call backend transcription API
         setLoading(true);
+        if (window.showToast) window.showToast('AI Transcribing...', 'info');
+        
         try {
-          if (window.showToast) window.showToast('Transcribing audio...', 'info');
           const res = await api.ai.transcribe(audioBlob);
           if (res && res.text) {
             setInput(res.text);
-            if (window.showToast) window.showToast('Audio transcribed successfully!', 'success');
+            setVoiceModeActive(false);
+            if (window.showToast) window.showToast('Voice transcribed!', 'success');
           } else {
-            if (window.showToast) window.showToast('Could not transcribe audio.', 'error');
+            if (window.showToast) window.showToast('Speech not clear.', 'error');
           }
         } catch (err) {
-          if (window.showToast) window.showToast(`Transcription error: ${err.message}`, 'error');
+          if (window.showToast) window.showToast(err.message, 'error');
         } finally {
           setLoading(false);
         }
@@ -492,23 +391,13 @@ export default function ChatInterface({ onRefreshData }) {
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingDuration(0);
-
-      // Start a duration timer
-      timerRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-      }, 1000);
-
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      if (window.showToast) {
-        window.showToast('Microphone access denied or not available.', 'error');
-      } else {
-        alert('Microphone access denied or not available.');
-      }
+      timerRef.current = setInterval(() => setRecordingDuration(prev => prev + 1), 1000);
+    } catch (e) {
+      alert("Microphone connection failed.");
     }
   };
 
-  const stopRecording = () => {
+  const stopVoiceRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
@@ -519,672 +408,958 @@ export default function ChatInterface({ onRefreshData }) {
     }
   };
 
+  // Checklist handler
+  const handleToggleTask = async (task) => {
+    try {
+      const nextStatus = task.status === 'done' ? 'pending' : 'done';
+      await api.todos.update(task.id, { status: nextStatus });
+      if (onRefreshData) onRefreshData();
+    } catch (e) {
+      alert("Failed to toggle: " + e.message);
+    }
+  };
+
+  const isAllContext = selectedContextId === 'all';
+
+  // Selected project details (handle 'all' context dynamically)
+  const activeProjContext = isAllContext
+    ? {
+        title: 'All Workspaces',
+        client_name: `${projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length} Active`,
+        total_amount: projects.filter(p => p.status !== 'completed' && p.status !== 'finished').reduce((sum, p) => sum + parseFloat(p.total_amount || 0), 0),
+        status: 'active'
+      }
+    : (projects.find(p => p.id === selectedContextId) || null);
+
+  // Filter tasks & payments for the right side context
+  const activeProjTasks = isAllContext
+    ? todos.filter(t => t.status !== 'done').slice(0, 4)
+    : (activeProjContext ? todos.filter(t => t.project_id === activeProjContext.id && t.status !== 'done').slice(0, 4) : []);
+
+  const activeProjPayments = isAllContext
+    ? payments.slice(0, 3)
+    : (activeProjContext ? payments.filter(p => p.project_id === activeProjContext.id).slice(0, 3) : []);
+
+  const formatAmount = (val) => {
+    return parseFloat(val || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+  };
+
+  const renderInlineFormatting = (str) => {
+    if (!str) return '';
+    const regex = /(\*\*.*?\*\*|`.*?`)/g;
+    const parts = str.split(regex);
+    return parts.map((part, idx) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={idx} style={{ fontWeight: '700', color: '#fff' }}>{part.slice(2, -2)}</strong>;
+      }
+      if (part.startsWith('`') && part.endsWith('`')) {
+        return (
+          <code key={idx} style={{ 
+            background: 'rgba(255,255,255,0.06)', 
+            padding: '2px 6px', 
+            borderRadius: '4px', 
+            fontFamily: 'monospace',
+            fontSize: '0.8rem',
+            color: '#f43f5e',
+            border: '1px solid rgba(255,255,255,0.04)'
+          }}>
+            {part.slice(1, -1)}
+          </code>
+        );
+      }
+      return part;
+    });
+  };
+
+  const renderFormattedText = (text) => {
+    if (!text) return null;
+    const lines = text.split('\n');
+    return lines.map((line, lineIdx) => {
+      // Parse markdown links (e.g. [Label](url)) and render as high-fidelity buttons
+      const match = line.match(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/);
+      if (match) {
+        const label = match[1];
+        const url = match[2];
+        const isDownload = label.toLowerCase().includes('download') || url.toLowerCase().endsWith('.pdf');
+        
+        return (
+          <div key={lineIdx} style={{ margin: '12px 0' }}>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                textDecoration: 'none',
+                fontWeight: 600,
+                fontSize: '0.82rem',
+                background: isDownload ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)',
+                color: '#fff',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                boxShadow: isDownload ? '0 4px 15px rgba(16, 185, 129, 0.2)' : '0 4px 15px rgba(139, 92, 246, 0.2)',
+                cursor: 'pointer',
+                border: 'none'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.filter = 'brightness(1.1)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.filter = 'none';
+              }}
+            >
+              <Download size={14} />
+              <span>{label}</span>
+            </a>
+          </div>
+        );
+      }
+
+      if (line.startsWith('### ')) {
+        return (
+          <h3 key={lineIdx} style={{ 
+            fontSize: '1rem', 
+            fontWeight: '600', 
+            color: '#fff', 
+            margin: '12px 0 6px 0',
+            borderBottom: '1px solid rgba(255,255,255,0.05)',
+            paddingBottom: '4px'
+          }}>
+            {renderInlineFormatting(line.substring(4))}
+          </h3>
+        );
+      }
+      if (line.startsWith('## ')) {
+        return (
+          <h2 key={lineIdx} style={{ 
+            fontSize: '1.15rem', 
+            fontWeight: '600', 
+            color: '#fff', 
+            margin: '16px 0 8px 0',
+            borderBottom: '1px solid rgba(255,255,255,0.05)',
+            paddingBottom: '4px'
+          }}>
+            {renderInlineFormatting(line.substring(3))}
+          </h2>
+        );
+      }
+      if (line.startsWith('# ')) {
+        return (
+          <h1 key={lineIdx} style={{ 
+            fontSize: '1.3rem', 
+            fontWeight: '700', 
+            color: '#fff', 
+            margin: '20px 0 10px 0' 
+          }}>
+            {renderInlineFormatting(line.substring(2))}
+          </h1>
+        );
+      }
+      if (line.trim().startsWith('- ')) {
+        return (
+          <div key={lineIdx} style={{ 
+            display: 'flex', 
+            alignItems: 'flex-start', 
+            gap: '8px', 
+            margin: '4px 0 4px 12px',
+            fontSize: '0.86rem',
+            color: 'var(--text-secondary)'
+          }}>
+            <span style={{ color: 'var(--accent-primary)', fontSize: '1rem', lineHeight: '1.2' }}>•</span>
+            <div style={{ flex: 1 }}>{renderInlineFormatting(line.trim().substring(2))}</div>
+          </div>
+        );
+      }
+      if (line.trim() === '') {
+        return <div key={lineIdx} style={{ height: '8px' }} />;
+      }
+      return (
+        <p key={lineIdx} style={{ 
+          margin: '0 0 6px 0', 
+          fontSize: '0.86rem', 
+          color: 'var(--text-secondary)',
+          lineHeight: '1.5'
+        }}>
+          {renderInlineFormatting(line)}
+        </p>
+      );
+    });
+  };
+
   return (
-    <div className="glass-panel chat-container" style={{ display: 'flex', flexDirection: 'row', height: '600px', overflow: 'hidden' }}>
+    <div className="glass-panel" style={{ 
+      display: 'grid', 
+      gridTemplateColumns: sidebarOpen ? '240px 1fr 280px' : '1fr 280px', 
+      height: '620px', 
+      overflow: 'hidden', 
+      background: '#13131a',
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      boxShadow: '0 30px 80px rgba(0,0,0,0.9)'
+    }}>
       <style>{`
-        @keyframes recordPulse {
-          0% { opacity: 0.4; transform: scale(0.95); }
-          50% { opacity: 1; transform: scale(1.15); }
-          100% { opacity: 0.4; transform: scale(0.95); }
+        .ai-workspace-sidebar {
+          border-right: 1px solid rgba(255,255,255,0.03);
+          background: #171720;
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
         }
-        .pulse-dot {
-          animation: recordPulse 1.5s infinite ease-in-out;
+        .ai-workspace-chat {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
+          position: relative;
+          background: #0e0e13;
+        }
+        .ai-workspace-context {
+          border-left: 1px solid rgba(255,255,255,0.03);
+          background: #171720;
+          padding: 20px 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+          overflow-y: auto;
+        }
+        .whisper-orb-container {
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(9, 9, 11, 0.95);
+          z-index: 10;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 20px;
+        }
+        .voice-pulse-orb {
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          background: radial-gradient(circle, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+          box-shadow: 0 0 40px rgba(139, 92, 246, 0.6);
+          animation: recordPulse 2s infinite ease-in-out;
+        }
+        .suggestion-prompt-card {
+          padding: 12px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255, 255, 255, 0.04);
+          border-radius: 10px;
+          font-size: 0.76rem;
+          color: var(--text-secondary);
+          cursor: pointer;
+          transition: all 0.2s ease;
+          text-align: left;
+        }
+        .suggestion-prompt-card:hover {
+          background: rgba(255, 255, 255, 0.04);
+          border-color: rgba(139, 92, 246, 0.3);
+          color: #fff;
+          transform: translateY(-2px);
+        }
+        .timeline-step {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.72rem;
+          font-family: monospace;
+          color: var(--text-muted);
+        }
+        .timeline-step.completed {
+          color: var(--accent-cyan);
+        }
+        .timeline-step.active {
+          color: #fff;
+          animation: pulse 1.2s infinite;
+        }
+        .memory-sessions-list::-webkit-scrollbar {
+          width: 5px !important;
+          display: block !important;
+        }
+        .memory-sessions-list::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.01) !important;
+        }
+        .memory-sessions-list::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.12) !important;
+          border-radius: 4px !important;
+        }
+        .memory-sessions-list::-webkit-scrollbar-thumb:hover {
+          background: var(--accent-primary) !important;
         }
       `}</style>
-      
-      {/* 2. Sleek Conversation Sidebar */}
-      <div className="chat-sidebar" style={{
-        width: '220px',
-        borderRight: '1px solid var(--border-color)',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'rgba(10, 8, 19, 0.4)',
-        height: '100%',
-        flexShrink: 0
-      }}>
-        <button
-          type="button"
-          onClick={handleCreateNewChat}
-          style={{
-            margin: '16px',
-            padding: '10px 14px',
-            background: 'linear-gradient(135deg, var(--accent-primary) 0%, #7c3aed 100%)',
-            border: 'none',
-            borderRadius: '8px',
-            color: 'white',
-            fontSize: '0.82rem',
-            fontWeight: '600',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            boxShadow: '0 4px 12px rgba(124, 58, 237, 0.2)',
-            transition: 'transform 0.2s'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-          onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-        >
-          <Plus size={14} />
-          New Chat
-        </button>
+
+      {/* COLUMN 1: Pinned Sessions & History Drawer */}
+      {sidebarOpen && (
+        <div className="ai-workspace-sidebar">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Memory Session</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button 
+                onClick={handleCreateNewChat}
+                style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                title="Start new chat workspace"
+              >
+                <Plus size={15} />
+              </button>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                title="Hide sidebar history"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+
+          <div className="memory-sessions-list" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {conversations.map(c => {
+              const isActive = c.id === activeChatId;
+              const isEditing = editingChatId === c.id;
+              return (
+                <div 
+                  key={c.id}
+                  onClick={() => !isEditing && setActiveChatId(c.id)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '8px',
+                    background: isActive ? 'rgba(255,255,255,0.03)' : 'transparent',
+                    border: isActive ? '1px solid rgba(255,255,255,0.05)' : '1px solid transparent',
+                    cursor: isEditing ? 'default' : 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '0.8rem',
+                    color: isActive ? '#fff' : 'var(--text-secondary)',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {isEditing ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }} onClick={e => e.stopPropagation()}>
+                      <input 
+                        type="text"
+                        value={editingTitle}
+                        onChange={e => setEditingTitle(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleSaveRename();
+                          if (e.key === 'Escape') { setEditingChatId(null); setEditingTitle(''); }
+                        }}
+                        onBlur={handleSaveRename}
+                        autoFocus
+                        style={{
+                          background: 'rgba(255,255,255,0.06)',
+                          border: '1px solid var(--accent-primary)',
+                          borderRadius: '4px',
+                          color: '#fff',
+                          fontSize: '0.75rem',
+                          padding: '4px 6px',
+                          width: '100%',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flex: 1 }}>
+                        <Sparkles size={12} color={isActive ? 'var(--accent-primary)' : 'var(--text-muted)'} />
+                        <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{c.title}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={e => e.stopPropagation()}>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setEditingChatId(c.id); setEditingTitle(c.title); }}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                          title="Rename session"
+                          onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+                          onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteChat(c.id); }}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                          title="Delete session"
+                          onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                          onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ padding: '10px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            <Brain size={12} color="var(--accent-primary)" />
+            <span>Workspace context active</span>
+          </div>
+        </div>
+      )}
+
+      {/* COLUMN 2: Message Workspace & Floating Composer */}
+      <div className="ai-workspace-chat">
         
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 16px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {conversations.map(conv => {
-            const isActive = conv.id === activeChatId;
-            return (
-              <div 
-                key={conv.id}
+        {/* Floating Voice Mode Orb Overlay */}
+        {voiceModeActive && (
+          <div className="whisper-orb-container">
+            <h3 style={{ fontSize: '1rem', color: '#fff' }}>Futuristic Whisper Mode</h3>
+            <div className="voice-pulse-orb" />
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+              {isRecording ? `Listening... ${recordingDuration}s` : 'Processing transcription...'}
+            </span>
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              {isRecording ? (
+                <button className="btn" onClick={stopVoiceRecording} style={{ background: '#ef4444', color: '#fff' }}>
+                  <Square size={14} /> Stop & Transcribe
+                </button>
+              ) : (
+                <button className="btn btn-primary" onClick={startVoiceRecording}>
+                  <Mic size={14} /> Start Speak
+                </button>
+              )}
+              <button className="btn btn-secondary" onClick={() => setVoiceModeActive(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Minimal Chat Header */}
+        <div style={{
+          padding: '12px 18px',
+          borderBottom: '1px solid rgba(255,255,255,0.03)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: 'rgba(9, 9, 11, 0.1)',
+          zIndex: 40
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
                 style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: '6px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  background: isActive ? 'rgba(139, 92, 246, 0.15)' : 'transparent',
-                  border: isActive ? '1px solid rgba(139, 92, 246, 0.25)' : '1px solid transparent',
-                  cursor: 'pointer',
-                  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  gap: '4px',
+                  marginRight: '8px',
                   transition: 'all 0.2s'
-                }} 
-                onClick={() => setActiveChatId(conv.id)}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
-                    e.currentTarget.style.color = 'var(--text-primary)';
-                  }
                 }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = 'var(--text-secondary)';
-                  }
-                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.color = '#fff'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                title="Show history sidebar"
               >
-                {editingChatId === conv.id ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexGrow: 1, minWidth: 0 }}>
-                    <input
-                      ref={editInputRef}
-                      type="text"
-                      value={editingTitle}
-                      onChange={(e) => setEditingTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveRename();
-                        if (e.key === 'Escape') handleCancelRename();
-                        e.stopPropagation();
-                      }}
-                      onBlur={handleSaveRename}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        border: '1px solid var(--accent-primary)',
-                        borderRadius: '4px',
-                        color: 'var(--text-primary)',
-                        fontSize: '0.82rem',
-                        padding: '3px 6px',
-                        outline: 'none',
-                        width: '100%',
-                        minWidth: 0,
-                        fontFamily: 'inherit'
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <span 
-                    style={{ 
-                      fontSize: '0.82rem', 
-                      overflow: 'hidden', 
-                      textOverflow: 'ellipsis', 
-                      whiteSpace: 'nowrap',
-                      flexGrow: 1,
-                      marginRight: '4px',
-                      fontWeight: isActive ? 600 : 400
-                    }}
-                    onDoubleClick={(e) => handleStartRename(e, conv)}
-                    title="Double-click to rename"
-                  >
-                    {conv.title}
-                  </span>
-                )}
-                <div className="chat-item-actions" style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <Menu size={14} />
+                <span style={{ fontSize: '0.72rem' }}>History</span>
+              </button>
+            )}
+            <div>
+              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Active AI Model</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fff', fontSize: '0.82rem', fontWeight: 600 }}>
+                <Brain size={12} color="var(--accent-cyan)" />
+                <span>Vixx-Groq-Llama3</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Header controls: Copy Chat & Dropdown Workspace Context */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={handleCopyWholeChat}
+              disabled={!messages || messages.length === 0}
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: '8px',
+                color: chatCopied ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+                fontSize: '0.72rem',
+                padding: '6px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: (!messages || messages.length === 0) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s',
+                height: '30px',
+                opacity: (!messages || messages.length === 0) ? 0.5 : 1
+              }}
+              onMouseEnter={e => { 
+                if (messages && messages.length > 0) {
+                  e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.3)'; 
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; 
+                }
+              }}
+              onMouseLeave={e => { 
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)'; 
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'; 
+              }}
+              title="Copy entire conversation to clipboard"
+            >
+              {chatCopied ? (
+                <>
+                  <Check size={12} color="var(--accent-cyan)" />
+                  <span>Copied Chat!</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={12} />
+                  <span>Copy Chat</span>
+                </>
+              )}
+            </button>
+
+            {/* Enhanced custom dropdown UI */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }} ref={dropdownRef}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Workspace:</span>
+              <button
+                type="button"
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.75rem',
+                  padding: '6px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  minWidth: '130px',
+                  justifyContent: 'space-between',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.3)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'; }}
+              >
+                <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>
+                  {selectedContextId === 'all' ? 'All Workspaces' : (projects.find(p => p.id === selectedContextId)?.title || 'Select Project')}
+                </span>
+                <ChevronDown size={12} style={{ transition: 'transform 0.2s', transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0)' }} />
+              </button>
+
+              {dropdownOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  right: 0,
+                  width: '180px',
+                  background: 'rgba(20, 20, 26, 0.98)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '10px',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.5), 0 0 15px rgba(139,92,246,0.05)',
+                  zIndex: 100,
+                  padding: '6px',
+                  display: 'flex',
+                  flexDirection: 'column',
                   gap: '2px',
-                  opacity: isActive ? 1 : 0,
-                  transition: 'opacity 0.2s',
-                  flexShrink: 0
+                  backdropFilter: 'blur(12px)'
                 }}>
-                  {editingChatId !== conv.id && (
-                    <button 
-                      type="button"
-                      onClick={(e) => handleStartRename(e, conv)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        padding: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: '4px',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.color = 'var(--accent-primary)'}
-                      onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
-                      title="Rename Chat"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                  )}
-                  <button 
+                  <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteChat(conv.id);
-                    }}
+                    onClick={() => { setSelectedContextId('all'); setDropdownOpen(false); }}
                     style={{
-                      background: 'none',
+                      background: selectedContextId === 'all' ? 'rgba(139, 92, 246, 0.15)' : 'transparent',
                       border: 'none',
-                      color: 'var(--text-muted)',
+                      borderRadius: '6px',
+                      color: selectedContextId === 'all' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                      fontSize: '0.75rem',
+                      padding: '8px 10px',
+                      textAlign: 'left',
                       cursor: 'pointer',
-                      padding: '4px',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: '4px',
-                      transition: 'all 0.2s'
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      transition: 'all 0.15s',
+                      fontWeight: selectedContextId === 'all' ? 600 : 400
                     }}
-                    onMouseOver={(e) => e.currentTarget.style.color = '#f87171'}
-                    onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
-                    title="Delete Chat"
+                    onMouseEnter={e => { if (selectedContextId !== 'all') { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = '#fff'; } }}
+                    onMouseLeave={e => { if (selectedContextId !== 'all') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
                   >
-                    <Trash2 size={13} />
+                    <span>All Workspaces</span>
+                    {selectedContextId === 'all' && <Check size={12} />}
                   </button>
+
+                  {projects.map(p => {
+                    const isSelected = selectedContextId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { setSelectedContextId(p.id); setDropdownOpen(false); }}
+                        style={{
+                          background: isSelected ? 'rgba(139, 92, 246, 0.15)' : 'transparent',
+                          border: 'none',
+                          borderRadius: '6px',
+                          color: isSelected ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                          fontSize: '0.75rem',
+                          padding: '8px 10px',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          width: '100%',
+                          transition: 'all 0.15s',
+                          fontWeight: isSelected ? 600 : 400
+                        }}
+                        onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = '#fff'; } }}
+                        onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
+                      >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '130px' }}>{p.title}</span>
+                        {isSelected && <Check size={12} />}
+                      </button>
+                    );
+                  })}
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Messages Stream */}
+        <div className="chat-messages" ref={chatMessagesRef} style={{ flex: 1, padding: '20px 24px', overflowY: 'auto', minHeight: 0 }}>
+          {messages.map((msg, mIdx) => {
+            const isUser = msg.sender === 'user';
+            return (
+              <div 
+                key={msg.id || mIdx}
+                style={{
+                  display: 'flex',
+                  justifyContent: isUser ? 'flex-end' : 'flex-start',
+                  marginBottom: '20px',
+                  width: '100%'
+                }}
+              >
+                {isUser ? (
+                  /* User Pill design */
+                  <div style={{
+                    padding: '10px 16px',
+                    borderRadius: '16px 16px 2px 16px',
+                    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(99, 102, 241, 0.18) 100%)',
+                    border: '1px solid rgba(139, 92, 246, 0.4)',
+                    color: '#fff',
+                    fontSize: '0.85rem',
+                    maxWidth: '80%',
+                    boxShadow: '0 4px 15px rgba(139, 92, 246, 0.1)',
+                    lineHeight: '1.4'
+                  }}>
+                    {msg.text}
+                  </div>
+                ) : (
+                  /* Assistant inline content blocks (Card Bubble) */
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '12px', 
+                    width: '100%',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    borderLeft: '3px solid var(--accent-primary)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Sparkles size={14} color="var(--accent-primary)" />
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Vixx</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(msg.text, msg.id || mIdx)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: copiedMessageId === (msg.id || mIdx) ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.7rem',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          transition: 'all 0.25s'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = copiedMessageId === (msg.id || mIdx) ? 'var(--accent-cyan)' : 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                        title="Copy message to clipboard"
+                      >
+                        {copiedMessageId === (msg.id || mIdx) ? (
+                          <>
+                            <Check size={12} color="var(--accent-cyan)" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={12} />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                      {renderFormattedText(msg.text)}
+                    </div>
+
+                    {/* Collapsible reasoning timeline */}
+                    {msg.reasoningSteps && msg.reasoningSteps.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '8px' }}>
+                        <div 
+                          onClick={() => toggleThoughts(msg.id || mIdx)}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Brain size={12} color="var(--accent-primary)" />
+                            <span>Thinking Timeline</span>
+                          </div>
+                          {expandedThoughts[msg.id || mIdx] ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        </div>
+                        {expandedThoughts[msg.id || mIdx] && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '6px' }}>
+                            {msg.reasoningSteps.map((step, sIdx) => (
+                              <div key={sIdx} className="timeline-step completed">
+                                <span>[✓] {step}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
-        </div>
-      </div>
 
-      {/* 3. Main Chat Pane */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        position: 'relative'
-      }}>
-        <div className="chat-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingRight: '12px', paddingLeft: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div className="logo-icon" style={{ width: '28px', height: '28px', background: 'transparent', boxShadow: 'none', flexShrink: 0 }}>
-              <img src="/bot icon.png" alt="Vixx" style={{ width: '100%', height: '100%', borderRadius: '6px', objectFit: 'contain' }} />
-            </div>
-            <div>
-              <h3 className="chat-title-main" style={{ fontSize: '0.92rem', fontWeight: 600 }}>AI Command Center</h3>
-              <p className="chat-subtitle-main" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Powered by Groq & LangGraph</p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {/* Mobile Chat Selection Dropdown Trigger */}
-            <div className="mobile-chat-dropdown-container" style={{ position: 'relative' }}>
-              <button
-                type="button"
-                className="btn btn-secondary mobile-chat-select-btn"
-                onClick={() => setMobileRoomsDropdownOpen(!mobileRoomsDropdownOpen)}
-                style={{
-                  display: 'none',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '0.75rem',
-                  padding: '5px 8px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '6px',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer'
-                }}
-              >
-                <span style={{ maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {activeConv.title || 'Chat'}
-                </span>
-                <ChevronDown size={12} />
-              </button>
-              
-              {/* Dropdown Panel */}
-              {mobileRoomsDropdownOpen && (
-                <div 
-                  className="mobile-chat-rooms-popup glass-panel"
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: '8px',
-                    width: '220px',
-                    zIndex: 950,
-                    background: 'rgba(12, 10, 24, 0.98)',
-                    backdropFilter: 'blur(20px)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    borderRadius: '10px',
-                    boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
-                    padding: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px'
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleCreateNewChat();
-                      setMobileRoomsDropdownOpen(false);
-                    }}
-                    style={{
-                      padding: '7px 10px',
-                      background: 'linear-gradient(135deg, var(--accent-primary) 0%, #7c3aed 100%)',
-                      border: 'none',
-                      borderRadius: '6px',
-                      color: 'white',
-                      fontSize: '0.75rem',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Plus size={12} /> New Chat
-                  </button>
-                  
-                  <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.08)', margin: '2px 0' }} />
-                  
-                  <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    {conversations.map(conv => {
-                      const isActive = conv.id === activeChatId;
-                      return (
-                        <div
-                          key={conv.id}
-                          onClick={() => {
-                            setActiveChatId(conv.id);
-                            setMobileRoomsDropdownOpen(false);
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '6px 8px',
-                            borderRadius: '6px',
-                            background: isActive ? 'rgba(139, 92, 246, 0.15)' : 'transparent',
-                            color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                            fontSize: '0.75rem',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexGrow: 1, marginRight: '8px' }}>
-                            {conv.title}
-                          </span>
-                          
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const newTitle = prompt("Rename chat room to:", conv.title);
-                                if (newTitle && newTitle.trim() !== "") {
-                                  setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, title: newTitle.trim() } : c));
-                                }
-                              }}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'rgba(255, 255, 255, 0.4)',
-                                cursor: 'pointer',
-                                padding: '2px',
-                                display: 'flex',
-                                alignItems: 'center'
-                              }}
-                              title="Rename Chat"
-                            >
-                              <Pencil size={11} />
-                            </button>
-                            
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteChat(conv.id);
-                                if (conv.id === activeChatId) {
-                                  setMobileRoomsDropdownOpen(false);
-                                }
-                              }}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'rgba(255, 255, 255, 0.4)',
-                                cursor: 'pointer',
-                                padding: '2px',
-                                display: 'flex',
-                                alignItems: 'center'
-                              }}
-                              title="Delete Chat"
-                            >
-                              <Trash2 size={11} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleCopyChat}
-              className="btn btn-secondary copy-chat-btn"
-              style={{ 
-                fontSize: '0.72rem', 
-                padding: '6px 10px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '4px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                cursor: 'pointer',
-                borderRadius: '6px'
-              }}
-              title="Copy Conversation"
-            >
-              <Copy size={12} />
-              <span className="copy-chat-btn-text">Copy Chat</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="chat-messages" style={{ flex: 1, overflowY: 'auto' }}>
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`chat-bubble ${msg.sender} ${
-                msg.type === 'clarification' ? 'clarification' : ''
-              }`}
-              style={{
-                position: 'relative',
-                ...(msg.type === 'error'
-                  ? { background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }
-                  : msg.type === 'success'
-                  ? { background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid rgba(16, 185, 129, 0.25)', borderLeft: '3px solid #34d399' }
-                  : {})
-              }}
-            >
-              {/* Per-message copy button */}
-              {msg.id !== 'welcome' && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigator.clipboard.writeText(msg.text)
-                      .then(() => {
-                        if (window.showToast) window.showToast('Message copied to clipboard', 'success');
-                      })
-                      .catch(() => {
-                        if (window.showToast) window.showToast('Failed to copy message', 'error');
-                      });
-                  }}
-                  className="msg-copy-btn"
-                  style={{
-                    position: 'absolute',
-                    top: '8px',
-                    right: '8px',
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    borderRadius: '4px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: 0,
-                    transition: 'all 0.2s'
-                  }}
-                  title="Copy message"
-                >
-                  <Copy size={12} />
-                </button>
-              )}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexDirection: 'column', width: '100%' }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', width: '100%' }}>
-                  {msg.type === 'clarification' && <AlertCircle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />}
-                  {msg.type === 'success' && <CheckCircle2 size={16} style={{ marginTop: '2px', flexShrink: 0, color: '#34d399' }} />}
-                  <div style={{ flexGrow: 1 }}>
-                    {renderFormattedText(msg.text)}
-                    {msg.missingFields && msg.missingFields.length > 0 && (
-                      <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        {msg.missingFields.map((field) => (
-                          <span key={field} className="badge badge-critical" style={{ fontSize: '0.65rem' }}>
-                            Missing: {field}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {messages[messages.length - 1]?.id === msg.id && 
-                     msg.sender === 'assistant' && 
-                     (msg.text.includes('⚠️') || msg.text.toLowerCase().includes('are you sure') || msg.text.toLowerCase().includes('confirm to proceed')) && 
-                     !loading && (
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
-                        <button
-                          type="button"
-                          onClick={() => sendMessage('yes')}
-                          className="btn btn-primary"
-                          style={{ padding: '6px 16px', fontSize: '0.82rem', cursor: 'pointer', borderRadius: '6px' }}
-                        >
-                          Yes
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => sendMessage('no')}
-                          className="btn btn-secondary"
-                          style={{ padding: '6px 16px', fontSize: '0.82rem', cursor: 'pointer', borderRadius: '6px' }}
-                        >
-                          No
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Collapsible thought process */}
-                {msg.reasoningSteps && msg.reasoningSteps.length > 0 && (
-                  <div style={{ 
-                    margin: '8px 0 0 0', 
-                    background: 'rgba(255, 255, 255, 0.03)', 
-                    border: '1px solid rgba(255, 255, 255, 0.06)', 
-                    borderRadius: '8px', 
-                    width: '100%',
-                    overflow: 'hidden'
-                  }}>
-                    <button 
-                      type="button"
-                      onClick={() => setExpandedThoughts(prev => ({ ...prev, [msg.id]: !prev[msg.id] }))}
-                      style={{ 
-                        width: '100%', 
-                        padding: '8px 12px', 
-                        background: 'none', 
-                        border: 'none', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between', 
-                        fontSize: '0.78rem', 
-                        color: 'var(--text-secondary)', 
-                        cursor: 'pointer',
-                        fontWeight: 500
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Brain size={13} color="var(--accent-primary)" style={{ animation: expandedThoughts[msg.id] ? 'none' : 'pulse 2s infinite' }} />
-                        <span>{expandedThoughts[msg.id] ? 'Hide Vixx Thought Log' : 'Show Vixx Thought Log'}</span>
-                      </div>
-                      <span>{expandedThoughts[msg.id] ? '▲' : '▼'}</span>
-                    </button>
-                    
-                    {expandedThoughts[msg.id] && (
-                      <div style={{ 
-                         padding: '10px 14px', 
-                         borderTop: '1px solid rgba(255, 255, 255, 0.05)', 
-                         display: 'flex', 
-                         flexDirection: 'column', 
-                         gap: '6px', 
-                         maxHeight: '180px', 
-                         overflowY: 'auto',
-                         fontSize: '0.8rem',
-                         fontFamily: 'Courier New, monospace',
-                         color: 'rgba(255, 255, 255, 0.75)',
-                         textAlign: 'left'
-                      }}>
-                        {msg.reasoningSteps.map((step, sIdx) => (
-                          <div key={sIdx} style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                            <span style={{ color: 'var(--accent-primary)' }}>➔</span>
-                            <span>{step}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+          {/* Reasoning particle loader while thinking */}
           {loading && (
-            <div className="chat-bubble assistant" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <div className="logo-icon" style={{ width: '20px', height: '20px', background: 'transparent', boxShadow: 'none' }}>
-                <img src="/bot icon.png" alt="Vixx" style={{ width: '100%', height: '100%', borderRadius: '4px', objectFit: 'contain' }} />
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '12px', 
+              width: '100%', 
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              borderLeft: '3px solid var(--accent-primary)',
+              borderRadius: '12px',
+              padding: '16px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Sparkles size={14} color="var(--accent-primary)" />
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>AI Agent Thinking</span>
               </div>
-              <span className="pulse-text">Vixx is processing...</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div className="timeline-step active">
+                  <span className="pulse-text">[→] Compiling workspace variables...</span>
+                </div>
+                <div className="timeline-step">
+                  <span>[ ] Validating database ledger records...</span>
+                </div>
+                <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                  <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-primary)', animation: 'pulse 1s infinite' }} />
+                  <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-primary)', animation: 'pulse 1s infinite 0.2s' }} />
+                  <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent-primary)', animation: 'pulse 1s infinite 0.4s' }} />
+                </div>
+              </div>
             </div>
           )}
+
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Quick Action Chips */}
-        {!loading && !isConfirmationActive && (
-          <div style={{ display: 'flex', gap: '8px', padding: '0 20px 10px 20px', overflowX: 'auto', whiteSpace: 'nowrap', width: '100%', scrollbarWidth: 'none' }}>
+        {/* Suggestion Prompts Section (Shown when input is empty and chat is brand new) */}
+        {!input.trim() && !loading && messages.length <= 1 && (
+          <div style={{ padding: '0 24px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '14px' }}>
             {[
-              { text: "Show dashboard stats", label: "📊 Show Stats" },
-              { text: "List active projects", label: "💼 List Projects" },
-              { text: "Show my to-do list", label: "✅ To-Do List" },
-            ].map((chip, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => sendMessage(chip.text)}
-                style={{
-                  padding: '6px 12px',
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: '16px',
-                  fontSize: '0.78rem',
-                  color: 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  flexShrink: 0
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                  e.currentTarget.style.borderColor = 'var(--accent-primary)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-                }}
+              { text: 'Estimate budget details for active projects', label: 'Estimates' },
+              { text: 'List today priorities task backlog', label: 'Priorities' },
+              { text: 'Summarize financial collections outstanding', label: 'Invoices' },
+              { text: 'Create email follower reminder rule', label: 'Automations' }
+            ].map((p, idx) => (
+              <div 
+                key={idx} 
+                className="suggestion-prompt-card"
+                onClick={() => setInput(p.text)}
               >
-                {chip.label}
-              </button>
+                <div style={{ fontWeight: 600, color: '#fff', marginBottom: '2px', fontSize: '0.74rem' }}>{p.label}</div>
+                <div>{p.text}</div>
+              </div>
             ))}
           </div>
         )}
 
-        <form onSubmit={handleSend} className="chat-input-container">
-          <div className="chat-input-wrapper" style={{ alignItems: 'center' }}>
-            {isRecording ? (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 4px' }}>
-                <span className="pulse-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
-                <span style={{ fontSize: '0.9rem', color: '#ef4444', fontWeight: 600 }}>
-                  Recording audio... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                </span>
-              </div>
-            ) : (
-              <textarea
-                className="chat-input"
-                placeholder={isConfirmationActive ? "Please select Yes or No above..." : "Type a natural language command..."}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={loading || isConfirmationActive}
-                rows={1}
-                style={{
-                  resize: 'none',
-                  overflowY: 'auto',
-                  minHeight: '20px',
-                  maxHeight: '120px',
-                  fontFamily: 'inherit',
-                  paddingTop: '10px',
-                  paddingBottom: '10px',
-                  opacity: isConfirmationActive ? 0.6 : 1
-                }}
-              />
-            )}
-            
-            <div style={{ display: 'flex', gap: '8px', alignSelf: 'flex-end', marginBottom: '4px' }}>
-              {isRecording ? (
-                <button 
-                  type="button" 
-                  onClick={stopRecording} 
-                  className="btn" 
-                  style={{ 
-                    padding: '8px 12px', 
-                    background: 'rgba(239, 68, 68, 0.15)', 
-                    color: '#f87171', 
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    borderRadius: '8px',
-                    cursor: 'pointer' 
-                  }}
-                >
-                  <Square size={16} fill="#ef4444" />
-                </button>
-              ) : (
-                <button 
-                  type="button" 
-                  onClick={startRecording} 
-                  className="btn btn-secondary" 
-                  style={{ 
-                    padding: '8px 12px', 
-                    cursor: 'pointer',
-                    borderRadius: '8px',
-                    borderColor: 'rgba(255,255,255,0.08)',
-                    opacity: (loading || isConfirmationActive) ? 0.5 : 1
-                  }}
-                  disabled={loading || isConfirmationActive}
-                  title="Record voice message"
-                >
-                  <Mic size={16} />
-                </button>
-              )}
+        {/* Composer container */}
+        <div style={{
+          padding: '16px 24px',
+          borderTop: '1px solid rgba(255,255,255,0.03)',
+          background: 'rgba(9, 9, 11, 0.15)'
+        }}>
+          <form onSubmit={handleSend} style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: '12px',
+            padding: '8px 12px'
+          }}>
 
-              {!isRecording && (
-                <button type="submit" className="btn btn-primary" style={{ padding: '8px 16px' }} disabled={loading || isConfirmationActive}>
-                  <Send size={16} />
-                </button>
-              )}
+            <input 
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="Ask Jarvis to log bills, create checklist, or design rules..."
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: '#fff',
+                fontSize: '0.85rem'
+              }}
+            />
+
+            {/* Voice Mode Activation */}
+            <button 
+              type="button"
+              onClick={() => { setVoiceModeActive(true); startVoiceRecording(); }}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              title="Voice Whisper mode"
+            >
+              <Mic size={16} />
+            </button>
+
+            <button 
+              type="submit"
+              disabled={loading || !input.trim()}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: input.trim() ? 'var(--accent-primary)' : 'var(--text-muted)',
+                cursor: input.trim() ? 'pointer' : 'default',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <Send size={16} />
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* COLUMN 3: Live Database Context Panel */}
+      <div className="ai-workspace-context">
+        <div>
+          <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Project Context</span>
+          {activeProjContext ? (
+            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{activeProjContext.title}</h4>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                <span>{isAllContext ? 'Projects:' : 'Client:'} {activeProjContext.client_name || 'N/A'}</span>
+                <span className="badge badge-active" style={{ fontSize: '0.6rem', padding: '1px 5px' }}>{activeProjContext.status}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                <span>Budget: {formatAmount(activeProjContext.total_amount)}</span>
+              </div>
             </div>
+          ) : (
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '6px' }}>No active project context selected.</div>
+          )}
+        </div>
+
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.04)' }} />
+
+        {/* Active Checklist (Todos) */}
+        <div>
+          <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Pending Sprint Tasks</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+            {activeProjTasks.length === 0 ? (
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>All sprint tasks completed!</span>
+            ) : (
+              activeProjTasks.map(task => (
+                <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input 
+                    type="checkbox"
+                    checked={task.status === 'done'}
+                    onChange={() => handleToggleTask(task)}
+                    style={{ cursor: 'pointer', accentColor: 'var(--accent-primary)', width: '13px', height: '13px' }}
+                  />
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                    {task.title}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
-        </form>
+        </div>
+
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.04)' }} />
+
+        {/* Payments ledger */}
+        <div>
+          <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Financial Invoices</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+            {activeProjPayments.length === 0 ? (
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>No payment logs recorded.</span>
+            ) : (
+              activeProjPayments.map(p => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.76rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>{p.payment_type}</span>
+                  <span style={{ 
+                    fontWeight: 700, 
+                    color: p.status === 'received' ? '#34d399' : '#fbbf24' 
+                  }}>
+                    {formatAmount(p.amount)}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.04)' }} />
+
+        {/* Quick action triggers */}
+        <div>
+          <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Quick Integrations</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+            <button 
+              onClick={() => setInput(`generate todo report for projects in navy theme`)}
+              className="btn btn-secondary" 
+              style={{ padding: '6px', fontSize: '0.72rem', justifyContent: 'flex-start', width: '100%' }}
+            >
+              Compile PDF Report
+            </button>
+            <button 
+              onClick={() => alert("Google Calendar sync triggers automatically on schedule.")}
+              className="btn btn-secondary" 
+              style={{ padding: '6px', fontSize: '0.72rem', justifyContent: 'flex-start', width: '100%' }}
+            >
+              Trigger Sync Now
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

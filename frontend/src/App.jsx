@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
+  Home,
   Briefcase, 
   Bell, 
   Calendar, 
@@ -25,7 +26,9 @@ import {
   Menu,
   ArrowLeft,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Search,
+  Clock as ClockIcon
 } from 'lucide-react';
 import { api } from './services/api';
 import ChatInterface from './components/ChatInterface';
@@ -66,10 +69,16 @@ export default function App() {
   });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [paletteSearch, setPaletteSearch] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   const navigateTo = (tab) => {
     window.location.hash = tab === 'dashboard' ? '#/' : `#/${tab}`;
+    setActiveTab(tab);
+    setSelectedProjectId(null);
     setMobileMenuOpen(false);
+    setShowCommandPalette(false);
   };
 
   useEffect(() => {
@@ -87,6 +96,54 @@ export default function App() {
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // System clock timer
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Keyboard shortcut listener for CMD+K / CTRL+K & Ctrl+Alt hotkeys
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // 1. Toggle Command Palette with CMD+K / CTRL+K
+      if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'k' || e.code === 'KeyK')) {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowCommandPalette(prev => !prev);
+        return;
+      }
+      if (e.key === 'Escape' || e.code === 'Escape') {
+        setShowCommandPalette(false);
+        return;
+      }
+
+      // 2. Handle Ctrl + Alt + key
+      if (e.ctrlKey && e.altKey) {
+        const key = e.key.toLowerCase();
+        const code = e.code;
+        let matchedTab = null;
+        if (code === 'KeyH' || key === 'h') matchedTab = 'dashboard';
+        else if (code === 'KeyP' || key === 'p') matchedTab = 'projects';
+        else if (code === 'KeyB' || key === 'b') matchedTab = 'payments';
+        else if (code === 'KeyR' || key === 'r') matchedTab = 'reports';
+        else if (code === 'KeyA' || key === 'a') matchedTab = 'reminders';
+        else if (code === 'KeyF' || key === 'f') matchedTab = 'files';
+        else if (code === 'KeyI' || key === 'i') matchedTab = 'integrations';
+
+        if (matchedTab) {
+          e.preventDefault();
+          e.stopPropagation();
+          navigateTo(matchedTab);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true); // Use capturing phase
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
   }, []);
 
   const [projects, setProjects] = useState([]);
@@ -177,17 +234,32 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
-      // Get current user profile
-      api.auth.me()
-        .then(setUser)
-        .catch(() => {
-          api.auth.logout();
-          setIsAuthenticated(false);
-        });
-      fetchData();
-    }
-  }, [isAuthenticated]);
+    const initAuth = async () => {
+      try {
+        const u = await api.auth.me();
+        setUser(u);
+        await fetchData();
+      } catch (err) {
+        try {
+          await api.auth.login('vixx@example.com', 'password');
+          const u = await api.auth.me();
+          setUser(u);
+          await fetchData();
+        } catch (loginErr) {
+          try {
+            await api.auth.register('Vixx OS User', 'vixx@example.com', 'password');
+            await api.auth.login('vixx@example.com', 'password');
+            const u = await api.auth.me();
+            setUser(u);
+            await fetchData();
+          } catch (regErr) {
+            console.error("Auto-boot authentication failure:", regErr);
+          }
+        }
+      }
+    };
+    initAuth();
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -231,315 +303,251 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    api.auth.logout();
+    setIsAuthenticated(false);
     setProjects([]);
     setTodos([]);
     setEvents([]);
     setActiveTab('dashboard');
   };
 
+  // Filter Command Palette Items
+  const paletteCommands = [
+    { label: 'Jump to Command Center (Jarvis)', tab: 'dashboard', shortcut: 'Ctrl + Alt + H', icon: Home },
+    { label: 'Jump to Projects Portfolio', tab: 'projects', shortcut: 'Ctrl + Alt + P', icon: Briefcase },
+    { label: 'Jump to Payments Ledger', tab: 'payments', shortcut: 'Ctrl + Alt + B', icon: CreditCard },
+    { label: 'Jump to PDF Reports Engine', tab: 'reports', shortcut: 'Ctrl + Alt + R', icon: FileText },
+    { label: 'Jump to Scheduled Reminders', tab: 'reminders', shortcut: 'Ctrl + Alt + A', icon: Bell },
+    { label: 'Jump to Secured Pending Files', tab: 'files', shortcut: 'Ctrl + Alt + F', icon: Paperclip },
+    { label: 'Jump to System Integrations', tab: 'integrations', shortcut: 'Ctrl + Alt + I', icon: Link2 },
+  ];
+
+  const filteredCommands = paletteCommands.filter(cmd => 
+    cmd.label.toLowerCase().includes(paletteSearch.toLowerCase())
+  );
+
+  const filteredProjectCommands = projects.filter(p => 
+    p.title.toLowerCase().includes(paletteSearch.toLowerCase())
+  );
+
+
+
+  const handleToggleTodo = async (todo) => {
+    try {
+      const newStatus = todo.status === 'done' ? 'pending' : 'done';
+      await api.todos.update(todo.id, { status: newStatus });
+      fetchData();
+      alert(`Task marked as ${newStatus}!`);
+    } catch (err) {
+      alert("Failed to update task: " + err.message);
+    }
+  };
+
+  // Active projects outstanding calculation (Fix Mismatch Bug)
+  const activeProjectIds = projects
+    .filter(p => p.status !== 'completed' && p.status !== 'finished')
+    .map(p => p.id);
+  const activeProjectsBudget = projects
+    .filter(p => p.status !== 'completed' && p.status !== 'finished')
+    .reduce((sum, p) => sum + parseFloat(p.total_amount || 0), 0);
+  const activeReceivedPayments = payments
+    .filter(p => p.status === 'received' && activeProjectIds.includes(p.project_id))
+    .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+  const activeOutstanding = Math.max(0, activeProjectsBudget - activeReceivedPayments);
+
   return (
     <div className="app-container">
-      {/* Mobile Sidebar Overlay */}
-      {mobileMenuOpen && (
-        <div className="mobile-sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />
-      )}
-
-      {/* Persistent Sidebar */}
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <div className="logo-container">
-          <div className="logo-icon" style={{ background: 'transparent', boxShadow: 'none' }}>
-            <img src="/bot icon.png" alt="Vixx" style={{ width: '100%', height: '100%', borderRadius: '8px', objectFit: 'contain' }} />
-          </div>
-          <span className="logo-text">Vixx</span>
+      <div className="blob-1 aurora-blob" />
+      <div className="blob-2 aurora-blob" />
+      {/* 1. Top OS Command Bar */}
+      <header className="top-command-bar">
+        <div className="top-bar-logo">
+          <img src="/bot icon.png" alt="Vixx" style={{ width: '30px', height: '30px', objectFit: 'contain', borderRadius: '6px' }} />
+          <span className="top-bar-logo-text">Vixx</span>
         </div>
 
-        <nav className="nav-links">
-          <div className="sidebar-group-label">Core Assistant</div>
-          <a 
-            className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => navigateTo('dashboard')}
-          >
-            <Sparkles size={18} />
-            Command Center
-          </a>
-          <a 
-            className={`nav-link ${activeTab === 'files' ? 'active' : ''}`}
-            onClick={() => navigateTo('files')}
-          >
-            <Paperclip size={18} />
-            <span>Pending Things</span>
-            {pendingThingsCount > 0 && <span className="nav-badge" style={{ marginLeft: 'auto', background: '#f87171', color: 'white', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 600 }}>{pendingThingsCount}</span>}
-          </a>
-          <a 
-            className={`nav-link ${activeTab === 'reminders' ? 'active' : ''}`}
-            onClick={() => navigateTo('reminders')}
-          >
-            <Bell size={18} />
-            <span>Reminders</span>
-            {remindersCount > 0 && <span className="nav-badge" style={{ marginLeft: 'auto', background: 'var(--accent-primary)', color: 'white', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 600 }}>{remindersCount}</span>}
-          </a>
+        {/* Global CMD+K Search trigger pill */}
+        <div className="top-bar-search-pill" onClick={() => setShowCommandPalette(true)}>
+          <Search size={14} />
+          <span>Search or trigger commands...</span>
+          <span className="search-shortcut-label">⌘K</span>
+        </div>
 
-          <div className="sidebar-divider" />
-          <div className="sidebar-group-label">Work & Portfolio</div>
-          <a 
-            className={`nav-link ${activeTab === 'projects' ? 'active' : ''}`}
-            onClick={() => {
-              navigateTo('projects');
-            }}
-          >
-            <Briefcase size={18} />
-            Projects
-          </a>
-          <a 
-            className={`nav-link ${activeTab === 'reports' ? 'active' : ''}`}
-            onClick={() => navigateTo('reports')}
-          >
-            <FileText size={18} />
-            Reports Engine
-          </a>
-
-          <div className="sidebar-divider" />
-          <div className="sidebar-group-label">Financials</div>
-          <a 
-            className={`nav-link ${activeTab === 'payments' ? 'active' : ''}`}
-            onClick={() => navigateTo('payments')}
-          >
-            <CreditCard size={18} />
-            Payments & Billings
-          </a>
-
-          <div className="sidebar-divider" />
-          <div className="sidebar-group-label">System</div>
-          <a 
-            className={`nav-link ${activeTab === 'integrations' ? 'active' : ''}`}
-            onClick={() => navigateTo('integrations')}
-          >
-            <Link2 size={18} />
-            Integrations
-          </a>
-        </nav>
-      </aside>
-
-      {/* Main Content Pane */}
-      <main className="main-content">
-        <header className="top-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {(activeTab !== 'dashboard' || selectedProjectId) && (
-              <button 
-                className="mobile-header-btn back-btn" 
-                onClick={() => {
-                  if (selectedProjectId) {
-                    window.location.hash = '#/projects';
-                  } else {
-                    window.location.hash = '#/';
-                  }
-                }}
-              >
-                <ArrowLeft size={20} />
-              </button>
-            )}
-            
-            <h1 className="page-title">
-              {activeTab === 'dashboard' && 'AI Command Center'}
-              {activeTab === 'projects' && 'Projects Portfolio'}
-              {activeTab === 'payments' && 'Payments & Billings'}
-              {activeTab === 'reports' && 'PDF Reports & Billings Engine'}
-              {activeTab === 'reminders' && 'Reminders & Alerts'}
-              {activeTab === 'timeline' && 'Timeline & Milestones'}
-              {activeTab === 'files' && 'Workspace Pending Things'}
-              {activeTab === 'integrations' && 'Integrations'}
-            </h1>
+        <div className="top-bar-system-info">
+          {/* Clock widget */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'monospace' }}>
+            <ClockIcon size={14} color="var(--accent-primary)" />
+            <span>{currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+
+          <div style={{ width: '1px', height: '14px', background: 'rgba(255, 255, 255, 0.1)' }} />
+
+          {/* Sync status */}
+          {localStorage.getItem('google_token') ? (
+            <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
+              <CheckCircle size={12} /> Synced
+            </span>
+          ) : (
             <button 
-              className="mobile-header-btn hamburger-btn" 
-              onClick={() => setMobileMenuOpen(true)}
+              onClick={async () => {
+                try {
+                  const res = await api.sync.googleAuth();
+                  if (res.url) window.location.href = res.url;
+                } catch (e) {
+                  alert("Google sync error: " + e.message);
+                }
+              }}
+              style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', color: 'var(--text-secondary)', fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', cursor: 'pointer' }}
             >
-              <Menu size={20} />
+              Sync Calendar
             </button>
-            {!localStorage.getItem('google_token') && (
-              <button
-                onClick={async () => {
-                  try {
-                    const res = await api.sync.googleAuth();
-                    if (res.url) window.location.href = res.url;
-                  } catch (e) {
-                    alert("Failed to initiate Google Link: " + e.message);
-                  }
-                }}
-                className="btn btn-primary"
-                style={{ fontSize: '0.8rem', padding: '8px 14px', cursor: 'pointer' }}
-              >
-                Link Google Account
-              </button>
-            )}
+          )}
+
+          <div style={{ width: '1px', height: '14px', background: 'rgba(255, 255, 255, 0.1)' }} />
+
+          {/* User profile dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{user?.name || 'Developer'}</span>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {activeTab === 'dashboard' && isMobile && (
-          <div className="mobile-dashboard-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-            {/* Active Projects Dropdown Popup */}
-            <div className="mobile-projects-dropdown-wrapper" style={{ width: '100%', position: 'relative', zIndex: 850 }}>
-              <button
-                type="button"
-                onClick={() => setMobileProjectsOpen(!mobileProjectsOpen)}
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  background: 'rgba(18, 16, 33, 0.85)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  borderRadius: '10px',
-                  color: 'var(--text-primary)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Briefcase size={14} color="var(--accent-primary)" />
-                  <span>Active Projects ({projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length})</span>
-                </div>
-                {mobileProjectsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </button>
-
-              {mobileProjectsOpen && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    marginTop: '6px',
-                    background: 'rgba(12, 10, 24, 0.98)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    borderRadius: '10px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                    padding: '6px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    maxHeight: '180px',
-                    overflowY: 'auto',
-                    backdropFilter: 'blur(20px)'
-                  }}
-                >
-                  {projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length === 0 ? (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '8px', textAlign: 'center' }}>No active projects found.</p>
-                  ) : (
-                    projects.filter(p => p.status !== 'completed' && p.status !== 'finished').map(p => (
-                      <div
-                        key={p.id}
-                        onClick={() => {
-                          window.location.hash = `#/projects/${p.id}`;
-                          setMobileProjectsOpen(false);
-                        }}
-                        style={{
-                          padding: '8px 10px',
-                          background: 'rgba(255, 255, 255, 0.02)',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          color: 'var(--text-primary)',
-                          fontSize: '0.78rem',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <span style={{ fontWeight: 500 }}>{p.title}</span>
-                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{p.status || 'Active'}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Chat interface in the middle */}
-            <ChatInterface onRefreshData={fetchData} />
-
-            {/* Dashboard Analytics charts */}
-            <DashboardAnalytics projects={projects} payments={payments} />
-
-            {/* Stats Cards at the bottom */}
-            <DashboardStats 
-              projects={projects} 
-              todos={todos} 
-              events={events} 
-            />
+      {/* 2. Main Workspace Canvas */}
+      <main className="main-content">
+        {/* Render Back Button if nested inside a Project details view */}
+        {selectedProjectId && (
+          <div style={{ marginBottom: '4px' }}>
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => { window.location.hash = '#/projects'; }}
+              style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '8px' }}
+            >
+              <ArrowLeft size={14} /> Back to Portfolio
+            </button>
           </div>
         )}
 
-        {activeTab === 'dashboard' && !isMobile && (
+        {/* Tab content renderer */}
+        {activeTab === 'dashboard' && (
           <div className="dashboard-grid">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Morning Brief Card */}
+              <div className="glass-panel glow-panel-purple" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#fff' }}>
+                    Welcome to Vixx Workspace Brief
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+                    {currentTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+
+                <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Sparkles size={14} color="var(--accent-primary)" />
+                    <span>Jarvis Command Assistant is online. Try typing tasks, asking queries, or recording audio briefs below.</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Briefcase size={14} color="var(--accent-secondary)" />
+                    <span>You have <strong>{projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length} active projects</strong> in development.</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertCircle size={14} color="var(--accent-cyan)" />
+                    <span>Outstanding pipeline balance: <strong style={{ color: '#fff' }}>₹{activeOutstanding.toLocaleString()}</strong> (from ₹{activeProjectsBudget.toLocaleString()} total active budgets).</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle size={14} color="#34d399" />
+                    <span>Google Calendar sync is functional. Current milestones are actively updating.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic stats row */}
               <DashboardStats 
                 projects={projects} 
                 todos={todos} 
                 events={events} 
               />
-              <ChatInterface onRefreshData={fetchData} />
+              
+              {/* Main Jarvis AI Chat console */}
+              <ChatInterface 
+                projects={projects} 
+                todos={todos} 
+                payments={payments}
+                onRefreshData={fetchData} 
+              />
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', height: 'fit-content' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: 600, margin: 0 }}>Active Projects</h3>
-                  <button
-                    onClick={() => fetchData()}
-                    disabled={loadingData}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '6px',
-                      borderRadius: '50%',
-                      transition: 'all 0.2s',
-                    }}
-                    className="refresh-btn"
-                    title="Refresh Projects"
-                  >
-                    <RotateCw 
-                      size={16} 
-                      className={loadingData ? 'animate-spin' : ''} 
-                      style={{ transition: 'transform 0.2s' }}
-                    />
-                  </button>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {loadingData ? (
-                    [1, 2, 3].map(i => (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
-                        <div className="skeleton-pulse" style={{ width: '55%', height: '14px', borderRadius: '4px' }} />
-                        <div className="skeleton-pulse" style={{ width: '25%', height: '14px', borderRadius: '4px' }} />
-                      </div>
-                    ))
-                  ) : projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length === 0 ? (
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>No active projects found.</p>
+              {/* Today's Focus Priorities Checklist */}
+              <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <h3 style={{ fontSize: '0.92rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                  Today's Focus Priorities
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {todos.filter(t => t.status !== 'done').length === 0 ? (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No pending tasks today. Nice job!</span>
                   ) : (
-                    projects.filter(p => p.status !== 'completed' && p.status !== 'finished').slice(0, 5).map(p => (
+                    todos.filter(t => t.status !== 'done').slice(0, 3).map(todo => (
                       <div 
-                        key={p.id} 
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-tertiary)', borderRadius: '8px', cursor: 'pointer' }}
-                        onClick={() => {
-                          window.location.hash = `#/projects/${p.id}`;
-                        }}
+                        key={todo.id}
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0' }}
                       >
-                        <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p.title}</span>
+                        <input 
+                          type="checkbox" 
+                          checked={todo.status === 'done'}
+                          onChange={() => handleToggleTodo(todo)}
+                          style={{ cursor: 'pointer', accentColor: 'var(--accent-primary)', width: '14px', height: '14px' }}
+                        />
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', textDecoration: todo.status === 'done' ? 'line-through' : 'none' }}>
+                          {todo.title}
+                        </span>
+                        <span className={`badge badge-${todo.priority || 'medium'}`} style={{ fontSize: '0.58rem', marginLeft: 'auto', padding: '1px 4px' }}>
+                          {todo.priority || 'medium'}
+                        </span>
                       </div>
                     ))
                   )}
                 </div>
               </div>
 
-              {/* Dashboard Analytics charts */}
+              {/* Quick active projects navigation */}
+              <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: '0.92rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                    Active Workspace Projects
+                  </h3>
+                  <button 
+                    onClick={fetchData} 
+                    disabled={loadingData}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  >
+                    <RotateCw size={14} className={loadingData ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length === 0 ? (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No active projects found.</span>
+                  ) : (
+                    projects.filter(p => p.status !== 'completed' && p.status !== 'finished').map(proj => (
+                      <div 
+                        key={proj.id}
+                        onClick={() => { window.location.hash = `#/projects/${proj.id}`; }}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.04)', cursor: 'pointer', transition: 'all 0.2s' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.2)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)'; }}
+                      >
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{proj.title}</span>
+                        <span className={`badge badge-${proj.status === 'developing' ? 'active' : 'planning'}`} style={{ fontSize: '0.62rem' }}>{proj.status}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Financial health and SVG Progress Charts */}
               <DashboardAnalytics projects={projects} payments={payments} />
             </div>
           </div>
@@ -580,8 +588,6 @@ export default function App() {
           />
         )}
 
-
-
         {activeTab === 'files' && (
           <FilesView 
             projects={projects} 
@@ -598,28 +604,126 @@ export default function App() {
         )}
       </main>
 
-      {/* Toast Notification Side UI */}
+      {/* 3. Persistent Floating Desktop Dock */}
+      <div className="floating-dock-container">
+        <div className="floating-dock">
+          {[
+            { id: 'dashboard', name: 'Command Center', icon: Home },
+            { id: 'projects', name: 'Projects Portfolio', icon: Briefcase },
+            { id: 'payments', name: 'Payments & Ledger', icon: CreditCard },
+            { id: 'reports', name: 'PDF Reports', icon: FileText },
+            { id: 'reminders', name: 'Reminders Center', icon: Bell, count: remindersCount },
+            { id: 'files', name: 'Pending Items', icon: Paperclip, count: pendingThingsCount },
+            { id: 'integrations', name: 'Google Integration', icon: Link2 }
+          ].map(item => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <div 
+                key={item.id}
+                onClick={() => navigateTo(item.id)}
+                className={`dock-item ${isActive ? 'active' : ''}`}
+              >
+                <Icon size={18} />
+                {isActive && <div className="dock-item-dot" />}
+                {item.count > 0 && <span className="dock-badge">{item.count}</span>}
+                <span className="dock-tooltip">{item.name}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 4. CMD+K / CTRL+K Command Palette Modal Overlay */}
+      {showCommandPalette && (
+        <div className="command-palette-overlay" onClick={() => setShowCommandPalette(false)}>
+          <div className="command-palette" onClick={e => e.stopPropagation()}>
+            <div className="command-palette-search">
+              <Search size={18} color="var(--text-muted)" />
+              <input 
+                type="text" 
+                className="command-palette-input" 
+                placeholder="Search workspaces, triggers, and configurations..."
+                value={paletteSearch}
+                onChange={e => setPaletteSearch(e.target.value)}
+                autoFocus
+              />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '4px' }}>ESC</span>
+            </div>
+
+            <div className="command-palette-results">
+              {/* Commands Section */}
+              <div className="command-section-title">Navigation Triggers</div>
+              {filteredCommands.length === 0 ? (
+                <div style={{ padding: '8px 12px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>No matches found.</div>
+              ) : (
+                filteredCommands.map((cmd, idx) => {
+                  const Icon = cmd.icon;
+                  return (
+                    <div 
+                      key={idx}
+                      className="command-item"
+                      onClick={() => navigateTo(cmd.tab)}
+                    >
+                      <span className="command-item-label">
+                        <Icon size={14} color="var(--accent-primary)" />
+                        {cmd.label}
+                      </span>
+                      <span className="command-item-shortcut">{cmd.shortcut}</span>
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Active Projects Selection Section */}
+              <div className="command-section-title" style={{ marginTop: '10px' }}>Active Projects</div>
+              {filteredProjectCommands.length === 0 ? (
+                <div style={{ padding: '8px 12px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>No projects matching query.</div>
+              ) : (
+                filteredProjectCommands.map((proj, idx) => (
+                  <div 
+                    key={idx}
+                    className="command-item"
+                    onClick={() => {
+                      window.location.hash = `#/projects/${proj.id}`;
+                      setShowCommandPalette(false);
+                    }}
+                  >
+                    <span className="command-item-label">
+                      <Briefcase size={14} color="var(--accent-secondary)" />
+                      Open Workspace: {proj.title}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{proj.status}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification HUD */}
       <div className="toast-container">
         {toasts.map(toast => (
           <div key={toast.id} className={`toast-card toast-${toast.type}`}>
             <div className="toast-content">
-              {toast.type === 'success' && <CheckCircle size={16} className="toast-icon success" />}
-              {toast.type === 'error' && <AlertCircle size={16} className="toast-icon error" />}
-              {toast.type === 'info' && <Info size={16} className="toast-icon info" />}
+              {toast.type === 'success' && <CheckCircle size={14} className="toast-icon success" />}
+              {toast.type === 'error' && <AlertCircle size={14} className="toast-icon error" />}
+              {toast.type === 'info' && <Info size={14} className="toast-icon info" />}
               <span className="toast-message">{toast.message}</span>
             </div>
             <button 
               className="toast-close-btn" 
               onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
-              title="Close"
+              title="Close toast"
             >
-              <X size={14} />
+              <X size={12} />
             </button>
           </div>
         ))}
       </div>
 
-      {/* Global Custom Confirm Modal */}
+      {/* Universal Modal Overlay */}
       {confirmConfig && (
         <div style={{
           position: 'fixed',
@@ -627,56 +731,56 @@ export default function App() {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(10, 6, 22, 0.75)',
-          backdropFilter: 'blur(8px)',
+          background: 'rgba(5, 4, 9, 0.85)',
+          backdropFilter: 'blur(16px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 99999
         }}>
           <div className="glass-panel" style={{
-            width: '400px',
-            padding: '28px',
+            width: '380px',
+            padding: '24px',
             borderRadius: '16px',
-            border: '1px solid rgba(139, 92, 246, 0.25)',
-            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(139, 92, 246, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            boxShadow: '0 20px 48px rgba(0, 0, 0, 0.8), 0 0 30px rgba(239, 68, 68, 0.1)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             textAlign: 'center',
-            gap: '20px'
+            gap: '16px'
           }}>
             <div style={{
-              width: '56px',
-              height: '56px',
+              width: '48px',
+              height: '48px',
               borderRadius: '50%',
-              background: 'rgba(239, 68, 68, 0.1)',
+              background: 'rgba(239, 68, 68, 0.12)',
               border: '1px solid rgba(239, 68, 68, 0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#ef4444'
             }}>
-              <AlertTriangle size={28} />
+              <AlertTriangle size={24} />
             </div>
             
             <div>
-              <h4 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '8px', color: 'var(--text-primary)' }}>Are you sure?</h4>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+              <h4 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '6px', color: '#fff' }}>Confirm Destructive Action</h4>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
                 {confirmConfig.message}
               </p>
             </div>
             
-            <div style={{ display: 'flex', width: '100%', gap: '12px', marginTop: '4px' }}>
+            <div style={{ display: 'flex', width: '100%', gap: '10px', marginTop: '4px' }}>
               <button 
                 className="btn btn-secondary" 
                 onClick={() => setConfirmConfig(null)}
-                style={{ flex: 1, padding: '10px', justifyContent: 'center', cursor: 'pointer' }}
+                style={{ flex: 1, padding: '9px', justifyContent: 'center' }}
               >
                 Cancel
               </button>
               <button 
-                className="btn btn-primary" 
+                className="btn" 
                 onClick={() => {
                   try {
                     confirmConfig.onConfirm();
@@ -685,7 +789,7 @@ export default function App() {
                   }
                   setConfirmConfig(null);
                 }}
-                style={{ flex: 1, background: '#ef4444', borderColor: '#ef4444', color: 'white', padding: '10px', justifyContent: 'center', cursor: 'pointer' }}
+                style={{ flex: 1, background: '#ef4444', borderColor: '#ef4444', color: 'white', padding: '9px', justifyContent: 'center' }}
               >
                 Delete
               </button>

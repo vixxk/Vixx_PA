@@ -110,58 +110,60 @@ export default function ProjectsView({
       </div>
 
       {showForm && (
-        <form className="glass-panel" onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>Create New Project</h3>
-          
-          {error && (
-            <div style={{ color: '#f87171', display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <AlertCircle size={16} /> {error}
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <form className="glass-panel modal-card" onClick={e => e.stopPropagation()} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff', marginBottom: '8px' }}>Create New Project</h3>
+            
+            {error && (
+              <div style={{ color: '#f87171', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem' }}>
+                <AlertCircle size={16} /> {error}
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label">Project Title</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="e.g. Project Apollo"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
             </div>
-          )}
 
-          <div className="form-group">
-            <label className="form-label">Project Title</label>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="e.g. Project Apollo"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
-          </div>
+            <div className="form-group">
+              <label className="form-label">Description</label>
+              <textarea
+                className="input-field"
+                placeholder="Describe the scope..."
+                style={{ minHeight: '80px', fontFamily: 'inherit' }}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
 
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <textarea
-              className="input-field"
-              placeholder="Describe the scope..."
-              style={{ minHeight: '80px', fontFamily: 'inherit' }}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
+            <div className="form-group">
+              <label className="form-label">Total Amount (INR)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className="input-field"
+                placeholder="e.g. 50000"
+                value={totalAmount}
+                onChange={(e) => setTotalAmount(e.target.value)}
+              />
+            </div>
 
-          <div className="form-group">
-            <label className="form-label">Total Amount (INR)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              className="input-field"
-              placeholder="e.g. 50000"
-              value={totalAmount}
-              onChange={(e) => setTotalAmount(e.target.value)}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Project'}
-            </button>
-          </div>
-        </form>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                {loading ? 'Creating...' : 'Create Project'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       <div style={{

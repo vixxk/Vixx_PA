@@ -301,7 +301,7 @@ async def process_ai_command(
     # Save to persistent memory with entity extraction
     entities = _extract_entities(final_state)
     await memory_service.save_message(db, user_id, session_id, "user", raw_input, intent=intent, entities=entities)
-    await memory_service.save_message(db, user_id, session_id, "assistant", final_state["summary"], intent=intent)
+    await memory_service.save_message(db, user_id, session_id, "assistant", final_state["summary"], intent=intent, entities={"reasoningSteps": final_state.get("reasoning_steps", [])})
 
     # Store entity facts for long-term memory
     await _store_entity_facts(db, user_id, session_id, final_state)
@@ -661,6 +661,48 @@ async def log_feedback(
         json.dump(data, f, indent=2)
 
     return {"success": True, "message": "Feedback submitted successfully."}
+
+
+@router.get("/sessions")
+async def list_user_sessions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    sessions = await memory_service.get_all_sessions(db, current_user.id)
+    return sessions
+
+
+@router.put("/sessions/{session_id}/rename")
+async def rename_user_session(
+    session_id: str,
+    title: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        s_uuid = UUID(session_id)
+    except (ValueError, TypeError):
+        import uuid as uuid_mod
+        s_uuid = uuid_mod.uuid5(current_user.id, session_id)
+        
+    await memory_service.rename_session(db, current_user.id, s_uuid, title)
+    return {"success": True}
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_user_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        s_uuid = UUID(session_id)
+    except (ValueError, TypeError):
+        import uuid as uuid_mod
+        s_uuid = uuid_mod.uuid5(current_user.id, session_id)
+        
+    await memory_service.delete_session(db, current_user.id, s_uuid)
+    return {"success": True}
 
 
 async def _filter_and_format_response(

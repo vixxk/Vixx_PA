@@ -59,9 +59,18 @@ async def read_project(
         # Determine which projects to list based on user's query
         lower_input = raw_input.lower()
         wants_finished = any(w in lower_input for w in ["finished", "completed", "done", "closed"])
-        wants_all = any(w in lower_input for w in ["all project", "every project", "all my"])
+        wants_active = any(w in lower_input for w in ["active", "planning", "developing", "in progress", "sprint"])
+        wants_all = any(w in lower_input for w in ["all project", "every project", "all my", "how many", "count", "summary", "status"])
 
-        if wants_finished:
+        if (wants_finished and wants_active) or wants_all:
+            if not projects:
+                return "No projects found."
+            msg = "### 💼 All Projects:\n\n"
+            for p in projects:
+                status_emoji = "✅" if p.status in ["finished", "completed"] else "🟡"
+                msg += f"- {status_emoji} **{p.title}** — *{p.status}*\n"
+            return msg
+        elif wants_finished:
             filtered = [p for p in projects if p.status in ["finished", "completed"]]
             if not filtered:
                 return "No finished/completed projects found."
@@ -75,14 +84,6 @@ async def read_project(
                 total = float(p.total_amount or 0)
                 received = sum(float(pay.amount) for pay in payments if pay.project_id == p.id and pay.status == "received")
                 msg += f"- **{p.title}** — Total Deal: ₹{total:,.0f} | Received: ₹{received:,.0f}\n"
-            return msg
-        elif wants_all:
-            if not projects:
-                return "No projects found."
-            msg = "### 💼 All Projects:\n\n"
-            for p in projects:
-                status_emoji = "✅" if p.status in ["finished", "completed"] else "🟡"
-                msg += f"- {status_emoji} **{p.title}** — *{p.status}*\n"
             return msg
         else:
             active_projects = [p for p in projects if p.status not in ["finished", "completed"]]

@@ -186,13 +186,47 @@ export default function FilesView({ projects = [], onRefresh }) {
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div className="form-group" style={{ flex: 1, minWidth: '240px' }}>
                 <label className="form-label" style={{ fontSize: '0.75rem' }}>Attach File (optional)</label>
-                <input 
-                  type="file" 
-                  id="files-view-input"
-                  className="input-field" 
-                  onChange={(e) => setFile(e.target.files[0])} 
-                  style={{ padding: '6px' }}
-                />
+                <div style={{ position: 'relative', width: '100%' }}>
+                  <input 
+                    type="file" 
+                    id="files-view-input"
+                    onChange={(e) => setFile(e.target.files[0] || null)} 
+                    style={{ display: 'none' }}
+                  />
+                  <label 
+                    htmlFor="files-view-input"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      padding: '8px 12px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      border: '1px dashed rgba(255, 255, 255, 0.15)',
+                      borderRadius: '8px',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.8rem',
+                      transition: 'all 0.2s ease',
+                      width: '100%',
+                      minHeight: '40px'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                      e.currentTarget.style.background = 'rgba(139, 92, 246, 0.04)';
+                      e.currentTarget.style.color = '#fff';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
+                    }}
+                  >
+                    <Paperclip size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {file ? file.name : 'Choose File...'}
+                    </span>
+                  </label>
+                </div>
               </div>
 
               <button 

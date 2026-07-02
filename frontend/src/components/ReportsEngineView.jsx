@@ -200,15 +200,10 @@ export default function ReportsEngineView({ projects = [] }) {
                 )}
               </div>
               <div style={{
-                maxHeight: '120px',
-                overflowY: 'auto',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                background: 'rgba(0, 0, 0, 0.25)',
                 display: 'flex',
-                flexDirection: 'column',
+                flexWrap: 'wrap',
                 gap: '8px',
+                padding: '4px 0',
               }}>
                 {projects.length === 0 ? (
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No projects available</span>
@@ -216,29 +211,60 @@ export default function ReportsEngineView({ projects = [] }) {
                   projects.map(p => {
                     const isChecked = selectedProjectIds.includes(p.id);
                     return (
-                      <label
+                      <button
                         key={p.id}
+                        type="button"
+                        onClick={() => handleToggleProject(p.id)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '8px',
+                          gap: '6px',
+                          padding: '6px 14px',
+                          borderRadius: '20px',
                           fontSize: '0.8rem',
-                          color: isChecked ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          fontWeight: 500,
                           cursor: 'pointer',
+                          background: isChecked 
+                            ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(236, 72, 153, 0.1) 100%)' 
+                            : 'rgba(255, 255, 255, 0.02)',
+                          border: isChecked 
+                            ? '1px solid rgba(139, 92, 246, 0.5)' 
+                            : '1px solid rgba(255, 255, 255, 0.08)',
+                          color: isChecked ? '#fff' : 'var(--text-secondary)',
+                          boxShadow: isChecked ? '0 0 10px rgba(139, 92, 246, 0.1)' : 'none',
+                          transition: 'all 0.2s ease',
                           userSelect: 'none',
                         }}
+                        onMouseEnter={e => {
+                          if (!isChecked) {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (!isChecked) {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                          }
+                        }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleProject(p.id)}
-                          style={{
-                            cursor: 'pointer',
-                            accentColor: 'var(--accent-primary)',
-                          }}
-                        />
+                        <div style={{
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '50%',
+                          border: isChecked ? 'none' : '1px solid rgba(255, 255, 255, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: isChecked ? 'var(--accent-primary)' : 'transparent',
+                          color: '#fff',
+                          flexShrink: 0,
+                          transition: 'all 0.2s'
+                        }}>
+                          {isChecked && <Check size={8} strokeWidth={4} />}
+                        </div>
                         {p.title}
-                      </label>
+                      </button>
                     );
                   })
                 )}
@@ -301,9 +327,11 @@ export default function ReportsEngineView({ projects = [] }) {
               fontSize: '0.95rem',
               marginTop: '10px',
               justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(139, 92, 246, 0.25)'
+              boxShadow: (loading || selectedProjectIds.length === 0) ? 'none' : '0 8px 24px rgba(139, 92, 246, 0.25)',
+              opacity: (loading || selectedProjectIds.length === 0) ? 0.5 : 1,
+              cursor: (loading || selectedProjectIds.length === 0) ? 'not-allowed' : 'pointer'
             }}
-            disabled={loading}
+            disabled={loading || selectedProjectIds.length === 0}
           >
             {loading ? (
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

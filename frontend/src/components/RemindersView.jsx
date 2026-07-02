@@ -403,101 +403,103 @@ export default function RemindersView({ onRefresh }) {
 
       {/* Create Reminder Form */}
       {showForm && (
-        <form className="glass-panel" onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Bell size={18} style={{ color: 'var(--accent-primary)' }} /> Schedule a Reminder
-          </h3>
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <form className="glass-panel modal-card" onClick={e => e.stopPropagation()} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', color: '#fff', marginBottom: '8px' }}>
+              <Bell size={18} style={{ color: 'var(--accent-primary)' }} /> Schedule a Reminder
+            </h3>
 
-          {error && (
-            <div style={{ color: '#f87171', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem' }}>
-              <AlertCircle size={16} /> {error}
-            </div>
-          )}
+            {error && (
+              <div style={{ color: '#f87171', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.85rem' }}>
+                <AlertCircle size={16} /> {error}
+              </div>
+            )}
 
-          <div className="form-group">
-            <label className="form-label">What to remind you about</label>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="e.g. Review website launch, Pay server bills"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Extra details (optional)</label>
-            <textarea
-              className="input-field"
-              placeholder="Any additional notes..."
-              style={{ minHeight: '60px', fontFamily: 'inherit' }}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '16px' }}>
             <div className="form-group">
-              <label className="form-label">When to remind</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '12px' }}>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <Calendar 
-                    size={16} 
-                    style={{ 
-                      position: 'absolute', 
-                      left: '12px', 
-                      color: 'var(--text-muted)', 
-                      pointerEvents: 'none' 
-                    }} 
-                  />
-                  <input
-                    type="date"
-                    className="input-field"
-                    style={{ paddingLeft: '36px' }}
-                    value={remindDate}
-                    onChange={(e) => setRemindDate(e.target.value)}
-                    required
-                  />
-                </div>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <Clock 
-                    size={16} 
-                    style={{ 
-                      position: 'absolute', 
-                      left: '12px', 
-                      color: 'var(--text-muted)', 
-                      pointerEvents: 'none' 
-                    }} 
-                  />
-                  <input
-                    type="time"
-                    className="input-field"
-                    style={{ paddingLeft: '36px' }}
-                    value={remindTime}
-                    onChange={(e) => setRemindTime(e.target.value)}
-                    required
-                  />
+              <label className="form-label">What to remind you about</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="e.g. Review website launch, Pay server bills"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Extra details (optional)</label>
+              <textarea
+                className="input-field"
+                placeholder="Any additional notes..."
+                style={{ minHeight: '60px', fontFamily: 'inherit' }}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">When to remind</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '12px' }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Calendar 
+                      size={16} 
+                      style={{ 
+                        position: 'absolute', 
+                        left: '12px', 
+                        color: 'var(--text-muted)', 
+                        pointerEvents: 'none' 
+                      }} 
+                    />
+                    <input
+                      type="date"
+                      className="input-field"
+                      style={{ paddingLeft: '36px' }}
+                      value={remindDate}
+                      onChange={(e) => setRemindDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Clock 
+                      size={16} 
+                      style={{ 
+                        position: 'absolute', 
+                        left: '12px', 
+                        color: 'var(--text-muted)', 
+                        pointerEvents: 'none' 
+                      }} 
+                    />
+                    <input
+                      type="time"
+                      className="input-field"
+                      style={{ paddingLeft: '36px' }}
+                      value={remindTime}
+                      onChange={(e) => setRemindTime(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
               </div>
+              <div className="form-group">
+                <label className="form-label">Send via</label>
+                <select className="input-field" value={channel} onChange={(e) => setChannel(e.target.value)}>
+                  <option value="sms">📱 SMS</option>
+                  <option value="email">📧 Email</option>
+                  <option value="both">📱📧 Both</option>
+                </select>
+              </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Send via</label>
-              <select className="input-field" value={channel} onChange={(e) => setChannel(e.target.value)}>
-                <option value="sms">📱 SMS</option>
-                <option value="email">📧 Email</option>
-                <option value="both">📱📧 Both</option>
-              </select>
-            </div>
-          </div>
 
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={formLoading}>
-              {formLoading ? 'Setting...' : 'Set Reminder'}
-            </button>
-          </div>
-        </form>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={formLoading}>
+                {formLoading ? 'Setting...' : 'Set Reminder'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* Active Reminders */}

@@ -187,9 +187,18 @@ export default function PaymentsView({ projects = [], onRefresh }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 auto', minWidth: '160px' }}>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500, whiteSpace: 'nowrap' }}>Filter Project:</span>
           <select 
+            className="input-field"
             value={selectedFilterProjectId} 
             onChange={(e) => setSelectedFilterProjectId(e.target.value)}
-            style={{ flex: '1 1 auto', minWidth: '100px', maxWidth: '220px', padding: '6px 10px', fontSize: '0.8rem' }}
+            style={{ 
+              flex: '1 1 auto', 
+              minWidth: '140px', 
+              maxWidth: '220px', 
+              padding: '6px 12px', 
+              fontSize: '0.8rem',
+              height: '36px',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }}
           >
             <option value="all">All Projects</option>
             {projects.map(pr => (
@@ -372,68 +381,69 @@ export default function PaymentsView({ projects = [], onRefresh }) {
 
       {/* Log Payment Form */}
       {showForm && (
-        <form className="glass-panel" onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Log Payment Milestone</h3>
-          
-          {error && <p style={{ color: '#f87171', fontSize: '0.85rem' }}>{error}</p>}
+        <div className="modal-overlay" onClick={() => setShowForm(false)}>
+          <form className="glass-panel modal-card" onClick={e => e.stopPropagation()} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff', marginBottom: '8px' }}>Log Payment Milestone</h3>
+            
+            {error && <p style={{ color: '#f87171', fontSize: '0.85rem' }}>{error}</p>}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div className="form-group">
-              <label className="form-label">Associated Project</label>
-              <select className="input-field" value={projectId} onChange={(e) => setProjectId(e.target.value)} required>
-                <option value="">-- Select Project --</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.title}</option>
-                ))}
-              </select>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">Associated Project</label>
+                <select className="input-field" value={projectId} onChange={(e) => setProjectId(e.target.value)} required>
+                  <option value="">-- Select Project --</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Payment Milestone Type</label>
+                <select className="input-field" value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
+                  <option value="Advance">Advance Payment</option>
+                  <option value="Partial">Milestone Release</option>
+                  <option value="Final">Final Release</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">Amount</label>
+                <input type="number" step="0.01" className="input-field" placeholder="10000" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">Status</label>
+                <select className="input-field" value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="pending">Pending</option>
+                  <option value="received">Received</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Received Date (Optional)</label>
+                <input type="date" className="input-field" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
+              </div>
             </div>
 
             <div className="form-group">
-              <label className="form-label">Payment Milestone Type</label>
-              <select className="input-field" value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
-                <option value="Advance">Advance Payment</option>
-                <option value="Partial">Milestone Release</option>
-                <option value="Final">Final Release</option>
-              </select>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div className="form-group">
-              <label className="form-label">Amount</label>
-              <input type="number" step="0.01" className="input-field" placeholder="10000" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+              <label className="form-label">Transaction Notes</label>
+              <textarea className="input-field" style={{ minHeight: '60px', fontFamily: 'inherit' }} placeholder="Invoice reference or milestone details..." value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
 
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <select className="input-field" value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="pending">Pending</option>
-                <option value="received">Received</option>
-                <option value="overdue">Overdue</option>
-              </select>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={formLoading}>
+                {formLoading ? 'Logging...' : 'Log Transaction'}
+              </button>
             </div>
-
-            <div className="form-group">
-              <label className="form-label">Received Date (Optional)</label>
-              <input type="date" className="input-field" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Transaction Notes</label>
-            <textarea className="input-field" style={{ minHeight: '60px', fontFamily: 'inherit' }} placeholder="Invoice reference or milestone details..." value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={formLoading}>
-              {formLoading ? 'Logging...' : 'Log Transaction'}
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       )}
 
       {/* Transaction Timeline */}

@@ -5,12 +5,16 @@ export default function DashboardAnalytics({ projects = [], payments = [] }) {
   const [activeSegment, setActiveSegment] = useState(null); // 'received', 'pending', or null
 
   // 1. Calculate aggregated financial metrics
+  const activeProjectIds = projects
+    .filter(p => p.status !== 'completed' && p.status !== 'finished')
+    .map(p => p.id);
+
   const totalBudget = projects
     .filter(p => p.status !== 'completed' && p.status !== 'finished')
     .reduce((sum, p) => sum + parseFloat(p.total_amount || 0), 0);
 
   const totalReceived = payments
-    .filter(p => p.status === 'received')
+    .filter(p => p.status === 'received' && activeProjectIds.includes(p.project_id))
     .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
 
   // Pending amount is budget minus received (min 0)

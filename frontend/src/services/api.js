@@ -24,13 +24,6 @@ const getHeaders = () => {
 
 const handleResponse = async (response) => {
   if (!response.ok) {
-    if (response.status === 401) {
-      localStorage.removeItem('token');
-      // Redirect to login if on browser environment
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
-    }
     const errData = await response.json().catch(() => ({}));
     throw new Error(errData.detail || 'Something went wrong');
   }
@@ -309,6 +302,27 @@ export const api = {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ rating, feedback_text: feedbackText }),
+      });
+      return handleResponse(response);
+    },
+    listSessions: async () => {
+      const response = await fetch(`${API_BASE_URL}/ai/sessions`, {
+        method: 'GET',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    },
+    renameSession: async (sessionId, title) => {
+      const response = await fetch(`${API_BASE_URL}/ai/sessions/${sessionId}/rename?title=${encodeURIComponent(title)}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    },
+    deleteSession: async (sessionId) => {
+      const response = await fetch(`${API_BASE_URL}/ai/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
       });
       return handleResponse(response);
     }

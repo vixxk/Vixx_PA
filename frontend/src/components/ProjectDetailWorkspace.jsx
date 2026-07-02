@@ -1325,13 +1325,47 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                     <div className="form-group" style={{ flex: 1, minWidth: '240px' }}>
                       <label className="form-label" style={{ fontSize: '0.75rem' }}>Attach File (optional)</label>
-                      <input 
-                        type="file" 
-                        id="pending-file-input"
-                        className="input-field" 
-                        onChange={(e) => setAttachmentFile(e.target.files[0])} 
-                        style={{ padding: '6px' }}
-                      />
+                      <div style={{ position: 'relative', width: '100%' }}>
+                        <input 
+                          type="file" 
+                          id="pending-file-input"
+                          onChange={(e) => setAttachmentFile(e.target.files[0] || null)} 
+                          style={{ display: 'none' }}
+                        />
+                        <label 
+                          htmlFor="pending-file-input"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            cursor: 'pointer',
+                            padding: '8px 12px',
+                            background: 'rgba(255, 255, 255, 0.02)',
+                            border: '1px dashed rgba(255, 255, 255, 0.15)',
+                            borderRadius: '8px',
+                            color: 'var(--text-secondary)',
+                            fontSize: '0.8rem',
+                            transition: 'all 0.2s ease',
+                            width: '100%',
+                            minHeight: '40px'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                            e.currentTarget.style.background = 'rgba(139, 92, 246, 0.04)';
+                            e.currentTarget.style.color = '#fff';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                            e.currentTarget.style.color = 'var(--text-secondary)';
+                          }}
+                        >
+                          <Paperclip size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {attachmentFile ? attachmentFile.name : 'Choose File...'}
+                          </span>
+                        </label>
+                      </div>
                     </div>
                     <button type="submit" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '40px' }}>
                       <Plus size={14} /> Add Pending Item
@@ -1401,14 +1435,48 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                   </div>
                   <div className="form-group">
                     <label className="form-label" style={{ fontSize: '0.75rem' }}>Contract PDF File</label>
-                    <input 
-                      type="file" 
-                      id="contract-file-input"
-                      className="input-field" 
-                      accept=".pdf"
-                      onChange={(e) => setContractFile(e.target.files[0])} 
-                      style={{ padding: '6px' }}
-                    />
+                    <div style={{ position: 'relative', width: '100%' }}>
+                      <input 
+                        type="file" 
+                        id="contract-file-input"
+                        accept=".pdf"
+                        onChange={(e) => setContractFile(e.target.files[0] || null)} 
+                        style={{ display: 'none' }}
+                      />
+                      <label 
+                        htmlFor="contract-file-input"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          cursor: 'pointer',
+                          padding: '8px 12px',
+                          background: 'rgba(255, 255, 255, 0.02)',
+                          border: '1px dashed rgba(255, 255, 255, 0.15)',
+                          borderRadius: '8px',
+                          color: 'var(--text-secondary)',
+                          fontSize: '0.8rem',
+                          transition: 'all 0.2s ease',
+                          width: '100%',
+                          minHeight: '40px'
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                          e.currentTarget.style.background = 'rgba(139, 92, 246, 0.04)';
+                          e.currentTarget.style.color = '#fff';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                          e.currentTarget.style.color = 'var(--text-secondary)';
+                        }}
+                      >
+                        <Upload size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {contractFile ? contractFile.name : 'Choose PDF File...'}
+                        </span>
+                      </label>
+                    </div>
                   </div>
                   <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Upload size={14} /> Upload Contract
