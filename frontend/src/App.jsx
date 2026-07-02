@@ -313,7 +313,7 @@ export default function App() {
 
   // Filter Command Palette Items
   const paletteCommands = [
-    { label: 'Jump to Command Center (Jarvis)', tab: 'dashboard', shortcut: 'Ctrl + Alt + H', icon: Home },
+    { label: 'Jump to Command Center (Vixx)', tab: 'dashboard', shortcut: 'Ctrl + Alt + H', icon: Home },
     { label: 'Jump to Projects Portfolio', tab: 'projects', shortcut: 'Ctrl + Alt + P', icon: Briefcase },
     { label: 'Jump to Payments Ledger', tab: 'payments', shortcut: 'Ctrl + Alt + B', icon: CreditCard },
     { label: 'Jump to PDF Reports Engine', tab: 'reports', shortcut: 'Ctrl + Alt + R', icon: FileText },
@@ -447,7 +447,7 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Sparkles size={14} color="var(--accent-primary)" />
-                    <span>Jarvis Command Assistant is online. Try typing tasks, asking queries, or recording audio briefs below.</span>
+                    <span>Vixx Command Assistant is online. Try typing tasks, asking queries, or recording audio briefs below.</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Briefcase size={14} color="var(--accent-secondary)" />
@@ -471,7 +471,7 @@ export default function App() {
                 events={events} 
               />
               
-              {/* Main Jarvis AI Chat console */}
+              {/* Main Vixx AI Chat console */}
               <ChatInterface 
                 projects={projects} 
                 todos={todos} 

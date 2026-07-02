@@ -15,6 +15,22 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://vixx:password@localhost:5432/work_os"
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_database_url(cls, v: str) -> str:
+        if v and v.startswith("postgresql"):
+            from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+            parsed = urlparse(v)
+            query = parse_qs(parsed.query)
+            query.pop("sslmode", None)
+            query.pop("channel_binding", None)
+            query["ssl"] = ["require"]
+            new_query = urlencode(query, doseq=True)
+            scheme = "postgresql+asyncpg"
+            parsed = parsed._replace(scheme=scheme, query=new_query)
+            return urlunparse(parsed)
+        return v
+
     # JWT Authentication
     JWT_SECRET_KEY: str = "placeholder_secret_key"
     JWT_ALGORITHM: str = "HS256"

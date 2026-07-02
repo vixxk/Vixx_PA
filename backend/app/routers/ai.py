@@ -151,11 +151,11 @@ async def process_ai_command(
             import re
             
             report_type = None
-            if "notepad" in lower_input:
+            if "notepad" in lower_input or "notes" in lower_input:
                 report_type = "notepad"
-            elif "payment" in lower_input:
+            elif any(w in lower_input for w in ["payment", "revenue", "earnings", "invoice", "bill"]):
                 report_type = "payments"
-            elif "todo" in lower_input or "task" in lower_input:
+            elif any(w in lower_input for w in ["todo", "task", "tasks", "backlog"]):
                 report_type = "todo"
             else:
                 report_type = "todo"

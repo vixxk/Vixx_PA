@@ -36,10 +36,20 @@ async def _find_project(db, user_id, proj_title, raw_input, session_data=None):
 
 async def list_payments(db, user_id, project_title=None, raw_input="", session_data=None):
     project, projects = await _find_project(db, user_id, project_title, raw_input, session_data)
+    lower_input = raw_input.lower()
+    wants_finished = any(w in lower_input for w in ["finished", "completed", "done"])
+    wants_active = any(w in lower_input for w in ["active", "planning", "developing", "in progress"])
+
     if project:
         stmt = select(Payment, Project.title).join(Project).filter(Payment.project_id == project.id).order_by(Payment.received_date.desc())
     else:
-        stmt = select(Payment, Project.title).join(Project).filter(Project.user_id == user_id).order_by(Payment.received_date.desc())
+        stmt = select(Payment, Project.title).join(Project).filter(Project.user_id == user_id)
+        if wants_finished and not wants_active:
+            stmt = stmt.filter(Project.status.in_(["finished", "completed"]))
+        elif wants_active and not wants_finished:
+            stmt = stmt.filter(Project.status.notin_(["finished", "completed"]))
+        stmt = stmt.order_by(Payment.received_date.desc())
+
     rows = (await db.execute(stmt)).all()
     
     if not rows:
@@ -52,7 +62,15 @@ async def list_payments(db, user_id, project_title=None, raw_input="", session_d
             )
         return "No payment records found."
 
-    msg = "### 💳 Payments Logged:\n\n"
+    if project:
+        msg = f"### 💳 Payments Logged for project '{project.title}':\n\n"
+    elif wants_finished and not wants_active:
+        msg = "### 💳 Payments Logged (Finished Projects):\n\n"
+    elif wants_active and not wants_finished:
+        msg = "### 💳 Payments Logged (Active Projects):\n\n"
+    else:
+        msg = "### 💳 Payments Logged:\n\n"
+
     total_received = 0
     for p_row, proj_title_str in rows:
         date_str = p_row.received_date.strftime("%Y-%m-%d") if p_row.received_date else "N/A"

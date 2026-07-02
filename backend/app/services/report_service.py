@@ -90,9 +90,9 @@ async def generate_report(
         report_type = _detect_report_type(raw_lower or report_type)
 
     if report_type in ["project", "overview"]:
-        if "todo" in raw_lower or "task" in raw_lower or "tasks" in raw_lower:
+        if any(w in raw_lower for w in ["todo", "task", "tasks", "backlog"]):
             report_type = "todo"
-        elif "payment" in raw_lower or "bill" in raw_lower or "invoice" in raw_lower:
+        elif any(w in raw_lower for w in ["payment", "payments", "bill", "billing", "invoice", "revenue", "earnings", "financial", "cashflow", "paid", "amount", "budget", "cost", "money", "rupees", "inr"]):
             report_type = "payments"
         else:
             report_type = "notepad"
@@ -155,7 +155,7 @@ def _detect_report_type(raw_lower: str) -> str:
     """Detect the report type from user's natural language input."""
     if "note" in raw_lower or "notepad" in raw_lower or "brief" in raw_lower:
         return "notepad"
-    if "payment" in raw_lower or "bill" in raw_lower or "invoice" in raw_lower or "earnings" in raw_lower or "revenue" in raw_lower or "financial" in raw_lower:
+    if any(w in raw_lower for w in ["payment", "payments", "bill", "billing", "invoice", "earnings", "revenue", "financial", "cashflow", "paid", "amount", "budget", "cost", "money", "rupees", "inr"]):
         return "payments"
     return "todo"  # Default fallback is To Do list
 

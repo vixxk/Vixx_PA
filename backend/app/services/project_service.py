@@ -54,6 +54,13 @@ async def read_project(
         )
 
     if target_project:
+        if session_data is not None:
+            session_data["last_project"] = {
+                "id": str(target_project.id),
+                "title": target_project.title,
+                "description": target_project.description,
+                "summary": target_project.summary
+            }
         return await _format_project_details(db, target_project)
     else:
         # Determine which projects to list based on user's query
@@ -74,6 +81,13 @@ async def read_project(
             filtered = [p for p in projects if p.status in ["finished", "completed"]]
             if not filtered:
                 return "No finished/completed projects found."
+            if len(filtered) == 1 and session_data is not None:
+                session_data["last_project"] = {
+                    "id": str(filtered[0].id),
+                    "title": filtered[0].title,
+                    "description": filtered[0].description,
+                    "summary": filtered[0].summary
+                }
             # Fetch payments for revenue info
             from app.models.payment import Payment
             filtered_ids = [p.id for p in filtered]
@@ -89,6 +103,13 @@ async def read_project(
             active_projects = [p for p in projects if p.status not in ["finished", "completed"]]
             if not active_projects:
                 return "No active projects found."
+            if len(active_projects) == 1 and session_data is not None:
+                session_data["last_project"] = {
+                    "id": str(active_projects[0].id),
+                    "title": active_projects[0].title,
+                    "description": active_projects[0].description,
+                    "summary": active_projects[0].summary
+                }
             msg = "### 💼 Active Projects:\n\n"
             for p in active_projects:
                 msg += f"- **{p.title}** - *{p.description or 'No description'}*\n"

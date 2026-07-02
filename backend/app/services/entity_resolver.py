@@ -202,6 +202,13 @@ async def resolve_project_from_context(
     if extracted_title and extracted_title.lower() not in ["all", "list", "projects", "none"]:
         match = _best_match(extracted_title, projects, key=lambda p: p.title)
         if match:
+            if session_data is not None:
+                session_data["last_project"] = {
+                    "id": str(match.id),
+                    "title": match.title,
+                    "description": match.description,
+                    "summary": match.summary
+                }
             return match
 
     # Strategy 2: Scan raw_input for project names
@@ -230,6 +237,13 @@ async def resolve_project_from_context(
             best_project = p
 
     if best_project:
+        if session_data is not None:
+            session_data["last_project"] = {
+                "id": str(best_project.id),
+                "title": best_project.title,
+                "description": best_project.description,
+                "summary": best_project.summary
+            }
         return best_project
 
     # Strategy 3: Use session context (last mentioned project)
@@ -242,7 +256,15 @@ async def resolve_project_from_context(
 
     # Strategy 4: If only 1 project exists, use it
     if len(projects) == 1:
-        return projects[0]
+        match = projects[0]
+        if session_data is not None:
+            session_data["last_project"] = {
+                "id": str(match.id),
+                "title": match.title,
+                "description": match.description,
+                "summary": match.summary
+            }
+        return match
 
     return None
 

@@ -30,39 +30,71 @@ import {
 import { api } from '../services/api';
 
 export default function ChatInterface({ projects = [], todos = [], payments = [], onRefreshData }) {
+  // Ensure we start a new session ID for this browser tab session if not already initialized
+  const hasSessionStarted = sessionStorage.getItem('vixx_chat_session_started');
+  if (!hasSessionStarted) {
+    const newId = 'chat_' + Date.now();
+    sessionStorage.setItem('vixx_chat_session_started', 'true');
+    sessionStorage.setItem('vixx_current_session_id', newId);
+  }
+
   // 1. Local Storage Persistent State
   const [conversations, setConversations] = useState(() => {
+    let initialConvs = [];
     try {
       const saved = localStorage.getItem('vixx_conversations');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const activeHasMessages = parsed.filter(c => c.messages.length > 1 || c.title !== 'New Chat');
-          if (activeHasMessages.length > 0) return activeHasMessages;
-          return parsed;
+          initialConvs = activeHasMessages.length > 0 ? activeHasMessages : parsed;
         }
       }
     } catch (e) {
       console.error("Error reading conversations:", e);
     }
-    return [
-      {
-        id: 'default',
-        title: 'System Boot Chat',
+    if (initialConvs.length === 0) {
+      initialConvs = [
+        {
+          id: 'default',
+          title: 'System Boot Chat',
+          messages: [
+            {
+              id: 'welcome',
+              sender: 'assistant',
+              text: "Welcome to Vixx Workspace. I am your resident AI agent. Ask me to draft proposals, schedule WhatsApp rules (e.g. 'schedule alert for payments'), track financials, or prioritize active sprint checklists.",
+              type: 'normal'
+            }
+          ],
+          createdAt: new Date().toISOString()
+        }
+      ];
+    }
+
+    // Prepend the new session if it hasn't been added to the conversations state yet
+    const currentSessionId = sessionStorage.getItem('vixx_current_session_id');
+    if (currentSessionId && !initialConvs.some(c => c.id === currentSessionId)) {
+      const newChat = {
+        id: currentSessionId,
+        title: 'New Session',
         messages: [
           {
             id: 'welcome',
             sender: 'assistant',
-            text: "Welcome to Vixx Workspace. I am your resident AI agent. Ask me to draft proposals, schedule WhatsApp rules (e.g. 'schedule alert for payments'), track financials, or prioritize active sprint checklists.",
+            text: "Vixx AI memory ready. Ask me to list invoices, track schedules, or prioritize backlog sprints.",
             type: 'normal'
           }
         ],
         createdAt: new Date().toISOString()
-      }
-    ];
+      };
+      return [newChat, ...initialConvs];
+    }
+    return initialConvs;
   });
 
   const [activeChatId, setActiveChatId] = useState(() => {
+    const currentSessionId = sessionStorage.getItem('vixx_current_session_id');
+    if (currentSessionId) return currentSessionId;
     const savedActive = localStorage.getItem('vixx_active_chat_id');
     return savedActive || 'default';
   });
@@ -123,6 +155,7 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
 
   useEffect(() => {
     localStorage.setItem('vixx_active_chat_id', activeChatId);
+    sessionStorage.setItem('vixx_current_session_id', activeChatId);
   }, [activeChatId]);
 
   // Handle click outside custom dropdown
@@ -141,13 +174,27 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
     const fetchDbSessions = async () => {
       try {
         const dbSessions = await api.ai.listSessions();
-        if (Array.isArray(dbSessions) && dbSessions.length > 0) {
-          setConversations(dbSessions);
-          const savedActive = localStorage.getItem('vixx_active_chat_id');
-          if (savedActive && dbSessions.some(c => c.id === savedActive)) {
-            setActiveChatId(savedActive);
+        if (Array.isArray(dbSessions)) {
+          setConversations(prev => {
+            const currentSessionId = sessionStorage.getItem('vixx_current_session_id');
+            const currentActive = prev.find(c => c.id === currentSessionId);
+            const filteredDb = dbSessions.filter(c => c.id !== currentSessionId);
+            if (currentActive && !dbSessions.some(c => c.id === currentSessionId)) {
+              return [currentActive, ...filteredDb];
+            }
+            return dbSessions.length > 0 ? dbSessions : prev;
+          });
+
+          const currentSessionId = sessionStorage.getItem('vixx_current_session_id');
+          if (currentSessionId) {
+            setActiveChatId(currentSessionId);
           } else {
-            setActiveChatId(dbSessions[0].id);
+            const savedActive = localStorage.getItem('vixx_active_chat_id');
+            if (savedActive && dbSessions.some(c => c.id === savedActive)) {
+              setActiveChatId(savedActive);
+            } else if (dbSessions.length > 0) {
+              setActiveChatId(dbSessions[0].id);
+            }
           }
         }
       } catch (err) {
@@ -200,38 +247,47 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
 
   const handleDeleteChat = (id) => {
     window.showConfirm("Delete this workspace conversation history?", async () => {
+      const originalConversations = [...conversations];
+      const originalActiveChatId = activeChatId;
+
+      // Optimistic UI updates
+      let nextActiveChatId = activeChatId;
+      const filtered = conversations.filter(c => c.id !== id);
+      
+      if (filtered.length === 0) {
+        const newDefaultId = 'default_' + Date.now();
+        nextActiveChatId = newDefaultId;
+        setConversations([
+          {
+            id: newDefaultId,
+            title: 'New Session',
+            messages: [
+              {
+                id: 'welcome',
+                sender: 'assistant',
+                text: "Vixx AI memory ready. Ask me to list invoices, track schedules, or prioritize backlog sprints.",
+                type: 'normal'
+              }
+            ],
+            createdAt: new Date().toISOString()
+          }
+        ]);
+      } else {
+        if (activeChatId === id) {
+          nextActiveChatId = filtered[0].id;
+        }
+        setConversations(filtered);
+      }
+      setActiveChatId(nextActiveChatId);
+
       try {
         await api.ai.deleteSession(id);
       } catch (err) {
-        console.error("Error deleting session in DB:", err);
+        console.error("Error deleting session in DB, rolling back:", err);
+        setConversations(originalConversations);
+        setActiveChatId(originalActiveChatId);
+        alert("Failed to delete chat session. Reverting list.");
       }
-
-      setConversations(prev => {
-        const filtered = prev.filter(c => c.id !== id);
-        if (filtered.length === 0) {
-          const newDefaultId = 'default_' + Date.now();
-          setActiveChatId(newDefaultId);
-          return [
-            {
-              id: newDefaultId,
-              title: 'New Session',
-              messages: [
-                {
-                  id: 'welcome',
-                  sender: 'assistant',
-                  text: "Vixx AI memory ready. Ask me to list invoices, track schedules, or prioritize backlog sprints.",
-                  type: 'normal'
-                }
-              ],
-              createdAt: new Date().toISOString()
-            }
-          ];
-        }
-        if (activeChatId === id) {
-          setActiveChatId(filtered[0].id);
-        }
-        return filtered;
-      });
     });
   };
 
@@ -871,7 +927,7 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
               <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>Active AI Model</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fff', fontSize: '0.82rem', fontWeight: 600 }}>
                 <Brain size={12} color="var(--accent-cyan)" />
-                <span>Vixx-Groq-Llama3</span>
+                <span>Groq-Llama3</span>
               </div>
             </div>
           </div>
@@ -1229,7 +1285,7 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
-              placeholder="Ask Jarvis to log bills, create checklist, or design rules..."
+              placeholder="Ask Vixx to log bills, create checklist, or design rules..."
               style={{
                 flex: 1,
                 background: 'transparent',
