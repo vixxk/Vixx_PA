@@ -1,0 +1,44 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'backend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Execute deployment commands via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_PRIVATE_KEY }}
+          script: |
+            # Navigate to the backend folder inside the repository
+            cd ~/Vixx_PA/backend
+            
+            # Pull the latest changes from GitHub
+            git fetch origin
+            git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)
+            
+            # Activate virtual environment and install/update python dependencies
+            if [ -d ".venv" ]; then
+              source .venv/bin/activate
+            else
+              python3 -m venv .venv
+              source .venv/bin/activate
+            fi
+            
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            
+            # Restart the FastAPI backend systemd service
+            sudo systemctl restart vixx-backend
+            sudo systemctl status vixx-backend --no-pager -n 5
+
