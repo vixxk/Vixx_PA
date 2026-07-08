@@ -34,22 +34,30 @@ async def process_due_reminders():
 
         for idx, reminder in enumerate(reminders, 1):
             logger.info(f"Processing reminder {idx}/{len(reminders)}: '{reminder.title}' (channel={reminder.channel})")
-            body = f"⏰ *REMINDER*: {reminder.title}"
-            if reminder.description:
-                body += f"\n📝 {reminder.description}"
-            # Convert UTC stored datetime to local timezone for readability
+            
             local_remind_at = reminder.remind_at.astimezone()
-            body += f"\n🕐 Scheduled: {local_remind_at.strftime('%b %d, %Y at %I:%M %p')}"
+            
+            # Premium SMS Alert Template
+            sms_body = f"🚨 *VIXX ALERT*\n\n📌 *Task*: {reminder.title}"
+            if reminder.description:
+                sms_body += f"\n📝 *Detail*: {reminder.description}"
+            sms_body += f"\n\n⏰ *Time*: {local_remind_at.strftime('%b %d, %Y at %I:%M %p')}"
+
+            # Email Body Template
+            email_body = f"⏰ *VIXX REMINDER*: {reminder.title}"
+            if reminder.description:
+                email_body += f"\n📝 {reminder.description}"
+            email_body += f"\n🕐 Scheduled: {local_remind_at.strftime('%b %d, %Y at %I:%M %p')}"
 
             success = False
             channel = reminder.channel or "sms"
 
             if channel in ("sms", "both"):
                 to_number = settings.USER_SMS_NUMBER
-                res = await send_sms(to_number, body)
+                res = await send_sms(to_number, sms_body)
                 if res.get("success"):
                     success = True
-                    logger.info(f"SMS reminder sent: {reminder.title}")
+                    logger.info(f"SMS alert sent: {reminder.title}")
 
             if channel in ("email", "both"):
                 # Get user email from relationship
@@ -60,7 +68,7 @@ async def process_due_reminders():
                 if user:
                     import os
                     recipient_email = os.getenv("SMTP_USER") or user.email
-                    res = await send_email(recipient_email, f"Reminder: {reminder.title}", body)
+                    res = await send_email(recipient_email, f"Vixx Reminder: {reminder.title}", email_body)
                     if res.get("success"):
                         success = True
 

@@ -107,8 +107,6 @@ async def process_ai_command(
 
     # Load conversation history from DB
     history = await memory_service.get_session_history(db, user_id, session_id, limit=20)
-    if not history:
-        history = await memory_service.get_recent_history(db, user_id, limit=20)
 
     # Auto-summarize if session gets long (every 40 messages)
     msg_count = await memory_service.get_session_count(db, user_id, session_id)
@@ -133,7 +131,7 @@ async def process_ai_command(
             cancel_msg = "Action cancelled."
             await memory_service.save_message(db, user_id, session_id, "user", raw_input)
             await memory_service.save_message(db, user_id, session_id, "assistant", cancel_msg)
-            return _make_response({"intent": "clarify"}, summary=cancel_msg)
+            return _make_response({"intent": "clarify"}, summary=cancel_msg, session_id=str(session_id))
     else:
         # ── Handle Google Sheets link requests ──
         lower_input = raw_input.lower()
@@ -144,7 +142,7 @@ async def process_ai_command(
             msg = "Google Sheets integration has been disabled. All data is stored and managed directly in PostgreSQL."
             await memory_service.save_message(db, user_id, session_id, "user", raw_input)
             await memory_service.save_message(db, user_id, session_id, "assistant", msg)
-            return _make_response({"intent": "clarify"}, summary=msg)
+            return _make_response({"intent": "clarify"}, summary=msg, session_id=str(session_id))
 
         # ── Deterministic Report Bypass ──
         if lower_input.startswith("generate ") and ("report" in lower_input or "pdf" in lower_input or "notepad" in lower_input):
@@ -203,7 +201,7 @@ async def process_ai_command(
                 "report": report_data,
                 "summary": summary_msg,
                 "reasoning_steps": ["⚡ Deterministic Engine → bypassed LLM to guarantee report delivery."]
-            }, summary=summary_msg)
+            }, summary=summary_msg, session_id=str(session_id))
 
         # ── Build initial state for LangGraph ──
         prev_state = session_data.get("pending_state")
@@ -260,7 +258,7 @@ async def process_ai_command(
         # Save to persistent memory
         await memory_service.save_message(db, user_id, session_id, "user", raw_input, intent=final_state.get("intent"))
         await memory_service.save_message(db, user_id, session_id, "assistant", clar_msg)
-        return _make_response(final_state)
+        return _make_response(final_state, session_id=str(session_id))
 
     # ── Dispatch to domain service based on intent ──
     intent = final_state.get("intent")
@@ -307,14 +305,14 @@ async def process_ai_command(
     await _store_entity_facts(db, user_id, session_id, final_state)
 
     session_data["message_count"] = session_data.get("message_count", 0) + 2
-    return _make_response(final_state, summary=final_state["summary"])
+    return _make_response(final_state, summary=final_state["summary"], session_id=str(session_id))
 
 
 # ══════════════════════════════════════════════════════════════
 # Helpers
 # ══════════════════════════════════════════════════════════════
 
-def _make_response(final_state: dict, summary: str = None) -> dict:
+def _make_response(final_state: dict, summary: str = None, session_id: str = None) -> dict:
     """Build a standardized response from the workflow state."""
     return {
         "intent": final_state.get("intent", "clarify"),
@@ -331,6 +329,7 @@ def _make_response(final_state: dict, summary: str = None) -> dict:
         "report": final_state.get("report"),
         "summary": summary or final_state.get("summary"),
         "reasoning_steps": final_state.get("reasoning_steps", []),
+        "session_id": session_id,
     }
 
 
@@ -762,7 +761,11 @@ async def _filter_and_format_response(
             "5. Keep the response clean, readable, and professional using Markdown.\n"
             "6. Keep any links, file paths, numbers, and critical action results (like status or success/failure messages) completely intact.\n"
             "7. All monetary amounts are ALWAYS in Indian Rupees (INR / ₹). Never use dollars ($), USD, or any other currency. Never convert amounts between currencies. If the user says '10000', it means ₹10,000 — not dollars.\n"
-            "8. When listing tasks/todos, you MUST always include the project name in parentheses/brackets next to the task title (e.g., '(Project: Hyrego)') for every task listed, ensuring no task is left without its project name."
+            "8. When listing tasks/todos, you MUST always include the project name in parentheses/brackets next to the task title (e.g., '(Project: Hyrego)') for every task listed, ensuring no task is left without its project name.\n"
+            "9. If the user's query is about external topics, general knowledge, trivia, public figures, math, coding, or anything not related to their workspace database or Vixx's capabilities (e.g., 'who is the president of India', 'what is 4+4', 'who is vivek', etc.):\n"
+            "   You MUST immediately refuse to answer. You MUST reply exactly with:\n"
+            "   \"I am a dedicated workspace assistant. I can only assist you with information and actions related to your projects, tasks, schedules, invoices, reminders, and files. Please ask me about your workspace data or capabilities.\"\n"
+            "   Do NOT cater to the query, do NOT explain, do NOT suggest checking other sites, and do NOT add any other conversational text."
         )
         
         prompt_content = (

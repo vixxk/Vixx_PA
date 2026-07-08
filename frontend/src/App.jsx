@@ -12,6 +12,7 @@ import {
   AlertCircle, 
   CheckCircle,
   Info,
+  HelpCircle,
   X,
   Paperclip,
   Table,
@@ -28,7 +29,8 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
-  Clock as ClockIcon
+  Clock as ClockIcon,
+  Bot
 } from 'lucide-react';
 import { api } from './services/api';
 import ChatInterface from './components/ChatInterface';
@@ -41,10 +43,99 @@ import PaymentsView from './components/PaymentsView';
 import ReportsEngineView from './components/ReportsEngineView';
 import DashboardAnalytics from './components/DashboardAnalytics';
 
+const DashboardSkeleton = () => (
+  <div className="dashboard-grid">
+    {/* Left Column */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Morning Brief Card skeleton */}
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="skeleton-pulse" style={{ height: '22px', width: '220px', borderRadius: '4px' }} />
+          <div className="skeleton-pulse" style={{ height: '14px', width: '140px', borderRadius: '4px' }} />
+        </div>
+        <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div className="skeleton-pulse" style={{ height: '14px', width: '14px', borderRadius: '50%', flexShrink: 0 }} />
+              <div className="skeleton-pulse" style={{ height: '14px', width: `${70 + (i * 5)}%`, borderRadius: '4px' }} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stats Bar skeleton */}
+      <div className="stats-bar">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="glass-panel stat-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="skeleton-pulse" style={{ height: '12px', width: '60px', borderRadius: '3px' }} />
+            <div className="skeleton-pulse" style={{ height: '26px', width: '100px', borderRadius: '4px' }} />
+          </div>
+        ))}
+      </div>
+
+      {/* Chat Interface skeleton */}
+      <div className="glass-panel" style={{ padding: '20px', height: '360px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div className="skeleton-pulse" style={{ height: '24px', width: '24px', borderRadius: '50%' }} />
+            <div className="skeleton-pulse" style={{ height: '16px', width: '100px', borderRadius: '4px' }} />
+          </div>
+          <div className="skeleton-pulse" style={{ height: '24px', width: '80px', borderRadius: '6px' }} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, padding: '16px 0', overflow: 'hidden' }}>
+          <div style={{ alignSelf: 'flex-start', display: 'flex', gap: '8px', width: '70%' }}>
+            <div className="skeleton-pulse" style={{ height: '32px', width: '100%', borderRadius: '12px 12px 12px 3px' }} />
+          </div>
+          <div style={{ alignSelf: 'flex-end', display: 'flex', gap: '8px', width: '50%' }}>
+            <div className="skeleton-pulse" style={{ height: '32px', width: '100%', borderRadius: '12px 12px 3px 12px' }} />
+          </div>
+          <div style={{ alignSelf: 'flex-start', display: 'flex', gap: '8px', width: '60%' }}>
+            <div className="skeleton-pulse" style={{ height: '32px', width: '100%', borderRadius: '12px 12px 12px 3px' }} />
+          </div>
+        </div>
+        <div className="skeleton-pulse" style={{ height: '40px', width: '100%', borderRadius: '10px' }} />
+      </div>
+    </div>
+
+    {/* Right Column */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Today's Focus Priorities skeleton */}
+      <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="skeleton-pulse" style={{ height: '14px', width: '150px', borderRadius: '4px' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {[1, 2, 3].map(i => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div className="skeleton-pulse" style={{ height: '14px', width: '14px', borderRadius: '4px', flexShrink: 0 }} />
+              <div className="skeleton-pulse" style={{ height: '14px', width: '70%', borderRadius: '4px' }} />
+              <div className="skeleton-pulse" style={{ height: '12px', width: '40px', borderRadius: '3px', marginLeft: 'auto' }} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Active Workspace Projects skeleton */}
+      <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="skeleton-pulse" style={{ height: '14px', width: '180px', borderRadius: '4px' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div className="skeleton-pulse" style={{ height: '24px', width: '24px', borderRadius: '6px', flexShrink: 0 }} />
+              <div className="skeleton-pulse" style={{ height: '14px', width: '60%', borderRadius: '4px' }} />
+              <div className="skeleton-pulse" style={{ height: '12px', width: '50px', borderRadius: '3px', marginLeft: 'auto' }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [isRegister, setIsRegister] = useState(false);
   const [user, setUser] = useState(null);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   
   // Auth Form State
   const [name, setName] = useState('');
@@ -153,7 +244,8 @@ export default function App() {
   const [sheetLinks, setSheetLinks] = useState({ payments_url: null });
   const [remindersCount, setRemindersCount] = useState(0);
   const [pendingThingsCount, setPendingThingsCount] = useState(0);
-  const [loadingData, setLoadingData] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [confirmConfig, setConfirmConfig] = useState(null);
 
@@ -230,6 +322,7 @@ export default function App() {
       console.error("Error loading dashboard data:", err);
     } finally {
       setLoadingData(false);
+      setHasLoadedOnce(true);
     }
   };
 
@@ -362,8 +455,48 @@ export default function App() {
       {/* 1. Top OS Command Bar */}
       <header className="top-command-bar">
         <div className="top-bar-logo">
-          <img src="/bot icon.png" alt="Vixx" style={{ width: '30px', height: '30px', objectFit: 'contain', borderRadius: '6px' }} />
-          <span className="top-bar-logo-text">Vixx</span>
+          <div 
+            onClick={() => window.location.href = '/'}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+            title="Go to Homepage"
+          >
+            <img src="/bot icon.png" alt="Vixx" style={{ width: '30px', height: '30px', objectFit: 'contain', borderRadius: '6px' }} />
+            <span className="top-bar-logo-text">Vixx</span>
+          </div>
+          <div 
+            onClick={() => setShowHelpModal(true)}
+            style={{ 
+              background: 'linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%)', 
+              border: '1px solid #67e8f9', 
+              color: '#000', 
+              cursor: 'pointer', 
+              padding: '4px 12px', 
+              marginLeft: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '20px',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 0 12px rgba(6, 182, 212, 0.5)',
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              letterSpacing: '0.02em',
+              whiteSpace: 'nowrap'
+            }}
+            onMouseEnter={e => { 
+              e.currentTarget.style.background = 'linear-gradient(135deg, #67e8f9 0%, #22d3ee 100%)'; 
+              e.currentTarget.style.boxShadow = '0 0 18px rgba(6, 182, 212, 0.8)'; 
+              e.currentTarget.style.transform = 'scale(1.04)'; 
+            }}
+            onMouseLeave={e => { 
+              e.currentTarget.style.background = 'linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%)'; 
+              e.currentTarget.style.boxShadow = '0 0 12px rgba(6, 182, 212, 0.5)'; 
+              e.currentTarget.style.transform = 'scale(1)'; 
+            }}
+            title="What can Vixx do?"
+          >
+            What can Vixx do?
+          </div>
         </div>
 
         {/* Global CMD+K Search trigger pill */}
@@ -429,128 +562,147 @@ export default function App() {
 
         {/* Tab content renderer */}
         {activeTab === 'dashboard' && (
-          <div className="dashboard-grid">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {/* Morning Brief Card */}
-              <div className="glass-panel glow-panel-purple" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#fff' }}>
-                    Welcome to Vixx Workspace Brief
-                  </h3>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-                    {currentTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
+          (loadingData && !hasLoadedOnce) ? (
+            <DashboardSkeleton />
+          ) : (
+            <div className="dashboard-grid">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Morning Brief Card */}
+                <div className="glass-panel glow-panel-purple" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#fff' }}>
+                      Welcome to Vixx Workspace Brief
+                    </h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+                      {currentTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  </div>
+
+                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Sparkles size={14} color="var(--accent-primary)" />
+                      <span>Vixx Command Assistant is online. Try typing tasks, asking queries, or recording audio briefs below.</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Briefcase size={14} color="var(--accent-secondary)" />
+                      <span>You have <strong>{projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length} active projects</strong> in development.</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertCircle size={14} color="var(--accent-cyan)" />
+                      <span>Outstanding pipeline balance: <strong style={{ color: '#fff' }}>₹{activeOutstanding.toLocaleString()}</strong> (from ₹{activeProjectsBudget.toLocaleString()} total active budgets).</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CheckCircle size={14} color="#34d399" />
+                      <span>Google Calendar sync is functional. Current milestones are actively updating.</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Sparkles size={14} color="var(--accent-primary)" />
-                    <span>Vixx Command Assistant is online. Try typing tasks, asking queries, or recording audio briefs below.</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Briefcase size={14} color="var(--accent-secondary)" />
-                    <span>You have <strong>{projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length} active projects</strong> in development.</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertCircle size={14} color="var(--accent-cyan)" />
-                    <span>Outstanding pipeline balance: <strong style={{ color: '#fff' }}>₹{activeOutstanding.toLocaleString()}</strong> (from ₹{activeProjectsBudget.toLocaleString()} total active budgets).</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <CheckCircle size={14} color="#34d399" />
-                    <span>Google Calendar sync is functional. Current milestones are actively updating.</span>
-                  </div>
-                </div>
+                {/* Dynamic stats row */}
+                <DashboardStats 
+                  projects={projects} 
+                  todos={todos} 
+                  events={events} 
+                />
+                
+                {/* Main Vixx AI Chat console */}
+                <ChatInterface 
+                  projects={projects} 
+                  todos={todos} 
+                  payments={payments}
+                  onRefreshData={fetchData} 
+                />
               </div>
 
-              {/* Dynamic stats row */}
-              <DashboardStats 
-                projects={projects} 
-                todos={todos} 
-                events={events} 
-              />
-              
-              {/* Main Vixx AI Chat console */}
-              <ChatInterface 
-                projects={projects} 
-                todos={todos} 
-                payments={payments}
-                onRefreshData={fetchData} 
-              />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {/* Today's Focus Priorities Checklist */}
-              <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <h3 style={{ fontSize: '0.92rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-                  Today's Focus Priorities
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {todos.filter(t => t.status !== 'done').length === 0 ? (
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No pending tasks today. Nice job!</span>
-                  ) : (
-                    todos.filter(t => t.status !== 'done').slice(0, 3).map(todo => (
-                      <div 
-                        key={todo.id}
-                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0' }}
-                      >
-                        <input 
-                          type="checkbox" 
-                          checked={todo.status === 'done'}
-                          onChange={() => handleToggleTodo(todo)}
-                          style={{ cursor: 'pointer', accentColor: 'var(--accent-primary)', width: '14px', height: '14px' }}
-                        />
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', textDecoration: todo.status === 'done' ? 'line-through' : 'none' }}>
-                          {todo.title}
-                        </span>
-                        <span className={`badge badge-${todo.priority || 'medium'}`} style={{ fontSize: '0.58rem', marginLeft: 'auto', padding: '1px 4px' }}>
-                          {todo.priority || 'medium'}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Quick active projects navigation */}
-              <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Today's Focus Priorities Checklist */}
+                <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <h3 style={{ fontSize: '0.92rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-                    Active Workspace Projects
+                    Today's Focus Priorities
                   </h3>
-                  <button 
-                    onClick={fetchData} 
-                    disabled={loadingData}
-                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-                  >
-                    <RotateCw size={14} className={loadingData ? 'animate-spin' : ''} />
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {todos.filter(t => t.status !== 'done').length === 0 ? (
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No pending tasks today. Nice job!</span>
+                    ) : (
+                      todos.filter(t => t.status !== 'done').slice(0, 3).map(todo => (
+                        <div 
+                          key={todo.id}
+                          style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0' }}
+                        >
+                          <div 
+                            onClick={() => handleToggleTodo(todo)}
+                            style={{ 
+                              cursor: 'pointer', 
+                              width: '14px', 
+                              height: '14px', 
+                              borderRadius: '4px', 
+                              border: todo.status === 'done' ? '1px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.25)', 
+                              background: todo.status === 'done' ? 'var(--accent-primary)' : 'transparent',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}
+                          >
+                            {todo.status === 'done' && (
+                              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1.5 4.5L3 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </div>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', textDecoration: todo.status === 'done' ? 'line-through' : 'none' }}>
+                            {todo.title}
+                          </span>
+                          <span className={`badge badge-${todo.priority || 'medium'}`} style={{ fontSize: '0.58rem', marginLeft: 'auto', padding: '1px 4px' }}>
+                            {todo.priority || 'medium'}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length === 0 ? (
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No active projects found.</span>
-                  ) : (
-                    projects.filter(p => p.status !== 'completed' && p.status !== 'finished').map(proj => (
-                      <div 
-                        key={proj.id}
-                        onClick={() => { window.location.hash = `#/projects/${proj.id}`; }}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.04)', cursor: 'pointer', transition: 'all 0.2s' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.2)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)'; }}
-                      >
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{proj.title}</span>
-                        <span className={`badge badge-${proj.status === 'developing' ? 'active' : 'planning'}`} style={{ fontSize: '0.62rem' }}>{proj.status}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
 
-              {/* Financial health and SVG Progress Charts */}
-              <DashboardAnalytics projects={projects} payments={payments} />
+                {/* Quick active projects navigation */}
+                <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ fontSize: '0.92rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+                      Active Workspace Projects
+                    </h3>
+                    <button 
+                      onClick={fetchData} 
+                      disabled={loadingData}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      <RotateCw size={14} className={loadingData ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length === 0 ? (
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No active projects found.</span>
+                    ) : (
+                      projects.filter(p => p.status !== 'completed' && p.status !== 'finished').map(proj => (
+                        <div 
+                          key={proj.id}
+                          onClick={() => { window.location.hash = `#/projects/${proj.id}`; }}
+                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.04)', cursor: 'pointer', transition: 'all 0.2s' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.2)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)'; }}
+                        >
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{proj.title}</span>
+                          <span className={`badge badge-${proj.status === 'developing' ? 'active' : 'planning'}`} style={{ fontSize: '0.62rem' }}>{proj.status}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Financial health and SVG Progress Charts */}
+                <DashboardAnalytics projects={projects} payments={payments} />
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {activeTab === 'projects' && (
@@ -794,6 +946,88 @@ export default function App() {
                 Delete
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Help / Capabilities Modal */}
+      {showHelpModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(5, 4, 9, 0.85)',
+          backdropFilter: 'blur(16px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999
+        }} onClick={() => setShowHelpModal(false)}>
+          <div className="glass-panel" style={{
+            width: '420px',
+            padding: '24px',
+            borderRadius: '16px',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '0 20px 48px rgba(0, 0, 0, 0.8), 0 0 30px rgba(139, 92, 246, 0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bot size={18} color="var(--accent-primary)" style={{ filter: 'drop-shadow(0 0 6px var(--accent-primary))' }} />
+                <h4 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#fff' }}>What Vixx Can Do</h4>
+              </div>
+              <button 
+                onClick={() => setShowHelpModal(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '4px' }}>
+              {[
+                "Send email reminders & SMS alerts",
+                "Sync Google Calendar for schedules",
+                "Robust project, operational, and financial transaction tracking",
+                "Intelligent voice commands and transcription automation",
+                "On-demand PDF summary and metrics report generation"
+              ].map((capability, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: 'rgba(139, 92, 246, 0.15)',
+                    border: '1px solid rgba(139, 92, 246, 0.3)',
+                    color: 'var(--accent-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    flexShrink: 0
+                  }}>
+                    {idx + 1}
+                  </div>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: '1.4' }}>
+                    {capability}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setShowHelpModal(false)}
+              style={{ width: '100%', padding: '10px', justifyContent: 'center', marginTop: '8px' }}
+            >
+              Got it
+            </button>
           </div>
         </div>
       )}

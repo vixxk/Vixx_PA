@@ -2,9 +2,14 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localho
 
 export const getFileUrl = (fileUrl) => {
   if (!fileUrl) return '';
-  if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) return fileUrl;
+  let url = fileUrl;
+  if (url.includes('localhost:8000')) {
+    const base = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+    url = url.replace('http://localhost:8000', base);
+  }
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
   const base = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
-  return `${base}${fileUrl}`;
+  return `${base}${url}`;
 };
 
 const getHeaders = () => {

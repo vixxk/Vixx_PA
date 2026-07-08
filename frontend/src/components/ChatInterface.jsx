@@ -362,29 +362,42 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
       const response = await api.ai.process(userText, googleToken, activeChatId);
       const responseMsgId = (Date.now() + 1).toString();
       
-      if (response.needs_clarification) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: responseMsgId,
-            sender: 'assistant',
-            text: response.clarification_message,
-            type: 'clarification',
-            missingFields: response.missing_fields,
-            reasoningSteps: response.reasoning_steps
+      const resolvedId = response.session_id || activeChatId;
+      
+      setConversations(prevConvs => {
+        return prevConvs.map(c => {
+          if (c.id === activeChatId) {
+            const assistantMsg = response.needs_clarification ? {
+              id: responseMsgId,
+              sender: 'assistant',
+              text: response.clarification_message,
+              type: 'clarification',
+              missingFields: response.missing_fields,
+              reasoningSteps: response.reasoning_steps
+            } : {
+              id: responseMsgId,
+              sender: 'assistant',
+              text: response.summary || "Action executed successfully.",
+              type: 'success',
+              reasoningSteps: response.reasoning_steps
+            };
+            return {
+              ...c,
+              id: resolvedId,
+              messages: [...c.messages, assistantMsg]
+            };
           }
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: responseMsgId,
-            sender: 'assistant',
-            text: response.summary || "Action executed successfully.",
-            type: 'success',
-            reasoningSteps: response.reasoning_steps
-          }
-        ]);
+          return c;
+        });
+      });
+
+      if (resolvedId !== activeChatId) {
+        setActiveChatId(resolvedId);
+        sessionStorage.setItem('vixx_current_session_id', resolvedId);
+        localStorage.setItem('vixx_active_chat_id', resolvedId);
+      }
+
+      if (!response.needs_clarification) {
         if (onRefreshData) onRefreshData();
       }
     } catch (error) {
@@ -541,7 +554,7 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
         return (
           <div key={lineIdx} style={{ margin: '12px 0' }}>
             <a
-              href={url}
+              href={getFileUrl(url)}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -576,47 +589,35 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
         );
       }
 
-      if (line.startsWith('### ')) {
+      // Parse general markdown headings: #, ##, ###, ####, #####, ######
+      const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const headingText = headingMatch[2];
+        const fontSize = level === 1 ? '1.25rem' : level === 2 ? '1.1rem' : level === 3 ? '0.95rem' : '0.85rem';
+        const fontWeight = level <= 3 ? '700' : '600';
+        const margin = level === 1 ? '16px 0 8px 0' : level === 2 ? '14px 0 6px 0' : '10px 0 4px 0';
+        const borderBottom = level <= 3 ? '1px solid rgba(255,255,255,0.05)' : 'none';
+        const paddingBottom = level <= 3 ? '4px' : '0';
+        const Tag = `h${level}`;
         return (
-          <h3 key={lineIdx} style={{ 
-            fontSize: '1rem', 
-            fontWeight: '600', 
+          <Tag key={lineIdx} style={{ 
+            fontSize, 
+            fontWeight, 
             color: '#fff', 
-            margin: '12px 0 6px 0',
-            borderBottom: '1px solid rgba(255,255,255,0.05)',
-            paddingBottom: '4px'
+            margin,
+            borderBottom,
+            paddingBottom
           }}>
-            {renderInlineFormatting(line.substring(4))}
-          </h3>
+            {renderInlineFormatting(headingText)}
+          </Tag>
         );
       }
-      if (line.startsWith('## ')) {
-        return (
-          <h2 key={lineIdx} style={{ 
-            fontSize: '1.15rem', 
-            fontWeight: '600', 
-            color: '#fff', 
-            margin: '16px 0 8px 0',
-            borderBottom: '1px solid rgba(255,255,255,0.05)',
-            paddingBottom: '4px'
-          }}>
-            {renderInlineFormatting(line.substring(3))}
-          </h2>
-        );
-      }
-      if (line.startsWith('# ')) {
-        return (
-          <h1 key={lineIdx} style={{ 
-            fontSize: '1.3rem', 
-            fontWeight: '700', 
-            color: '#fff', 
-            margin: '20px 0 10px 0' 
-          }}>
-            {renderInlineFormatting(line.substring(2))}
-          </h1>
-        );
-      }
-      if (line.trim().startsWith('- ')) {
+
+      // Parse bullet points
+      const bulletMatch = line.match(/^[-*]\s+(.*)$/);
+      if (bulletMatch) {
+        const bulletText = bulletMatch[1];
         return (
           <div key={lineIdx} style={{ 
             display: 'flex', 
@@ -627,7 +628,27 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
             color: 'var(--text-secondary)'
           }}>
             <span style={{ color: 'var(--accent-primary)', fontSize: '1rem', lineHeight: '1.2' }}>•</span>
-            <div style={{ flex: 1 }}>{renderInlineFormatting(line.trim().substring(2))}</div>
+            <div style={{ flex: 1 }}>{renderInlineFormatting(bulletText)}</div>
+          </div>
+        );
+      }
+
+      // Parse numbered lists
+      const numberListMatch = line.match(/^(\d+)\.\s+(.*)$/);
+      if (numberListMatch) {
+        const num = numberListMatch[1];
+        const itemText = numberListMatch[2];
+        return (
+          <div key={lineIdx} style={{ 
+            display: 'flex', 
+            alignItems: 'flex-start', 
+            gap: '8px', 
+            margin: '4px 0 4px 12px',
+            fontSize: '0.86rem',
+            color: 'var(--text-secondary)'
+          }}>
+            <span style={{ color: 'var(--accent-primary)', fontWeight: '600', minWidth: '16px' }}>{num}.</span>
+            <div style={{ flex: 1 }}>{renderInlineFormatting(itemText)}</div>
           </div>
         );
       }
@@ -934,6 +955,37 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
 
           {/* Header controls: Copy Chat & Dropdown Workspace Context */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={handleCreateNewChat}
+              style={{
+                background: 'rgba(139, 92, 246, 0.1)',
+                border: '1px solid rgba(139, 92, 246, 0.25)',
+                borderRadius: '8px',
+                color: 'var(--accent-primary)',
+                fontSize: '0.72rem',
+                padding: '6px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                height: '30px',
+                fontWeight: 600
+              }}
+              onMouseEnter={e => { 
+                e.currentTarget.style.background = 'rgba(139, 92, 246, 0.18)'; 
+                e.currentTarget.style.borderColor = 'var(--accent-primary)'; 
+              }}
+              onMouseLeave={e => { 
+                e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)'; 
+                e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.25)'; 
+              }}
+              title="Start a new chat session"
+            >
+              <Plus size={13} />
+              <span>New Chat</span>
+            </button>
             <button
               type="button"
               onClick={handleCopyWholeChat}
@@ -1354,14 +1406,9 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
               <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>All sprint tasks completed!</span>
             ) : (
               activeProjTasks.map(task => (
-                <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input 
-                    type="checkbox"
-                    checked={task.status === 'done'}
-                    onChange={() => handleToggleTask(task)}
-                    style={{ cursor: 'pointer', accentColor: 'var(--accent-primary)', width: '13px', height: '13px' }}
-                  />
-                  <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                <div key={task.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <span style={{ color: 'var(--accent-primary)', fontSize: '0.85rem', lineHeight: '1.2' }}>•</span>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '220px' }}>
                     {task.title}
                   </span>
                 </div>

@@ -18,6 +18,25 @@ from app.utils.llm import get_llm
 from langchain_core.messages import SystemMessage, HumanMessage
 
 
+def is_list_query(raw_input: str) -> bool:
+    low = raw_input.lower().strip()
+    list_keywords = ["list", "show", "find", "name", "display", "get", "what are", "how many", "count", "summary", "status", "classify", "view", "read"]
+    resource_keywords = ["project", "task", "todo", "payment", "invoice", "reminder", "file", "client", "pending"]
+    
+    # Direct list/classification indicators
+    if any(k in low for k in ["classify", "categories", "status"]):
+        return True
+        
+    for kw in list_keywords:
+        if kw in low:
+            for rk in resource_keywords:
+                if rk in low:
+                    return True
+            if "all" in low:
+                return True
+    return False
+
+
 async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any]:
     raw_input = state.get("raw_input", "")
     intent = state.get("intent", "clarify")
@@ -249,7 +268,11 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                     if extracted.get(key) is not None:
                         report[key] = extracted[key]
             elif intent == "create_project":
-                project_data["action"] = extracted.get("action") or "create"
+                extracted_action = extracted.get("action")
+                if not extracted_action and is_list_query(raw_input):
+                    project_data["action"] = "read"
+                else:
+                    project_data["action"] = extracted_action or "create"
                 for key in ["title", "new_title", "description", "total_amount", "status", "notepad", "updates"]:
                     if extracted.get(key) is not None:
                         project_data[key] = extracted[key]

@@ -34,4 +34,6 @@ class AIProcessResponse(BaseModel):
     report: Optional[Dict[str, Any]] = None
     summary: Optional[str] = None
     reasoning_steps: List[str] = []
+    session_id: Optional[str] = None
+
 

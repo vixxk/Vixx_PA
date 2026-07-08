@@ -155,6 +155,7 @@ async def get_session_history(
         .filter(
             ConversationLog.user_id == user_id,
             ConversationLog.session_id == session_id,
+            ConversationLog.role.in_(["user", "assistant"]),
         )
         .order_by(desc(ConversationLog.created_at))
         .limit(limit)
@@ -175,7 +176,10 @@ async def get_recent_history(
     """Retrieve the most recent messages regardless of session (for context continuity)."""
     stmt = (
         select(ConversationLog)
-        .filter(ConversationLog.user_id == user_id)
+        .filter(
+            ConversationLog.user_id == user_id,
+            ConversationLog.role.in_(["user", "assistant"]),
+        )
         .order_by(desc(ConversationLog.created_at))
         .limit(limit)
     )
@@ -210,6 +214,7 @@ async def get_relevant_context(
         select(ConversationLog)
         .filter(
             ConversationLog.user_id == user_id,
+            ConversationLog.role.in_(["user", "assistant"]),
             or_(*filters),
         )
         .order_by(desc(ConversationLog.created_at))
