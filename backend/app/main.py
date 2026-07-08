@@ -53,6 +53,14 @@ os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
+@app.get("/health", tags=["Health"])
+async def health_check():
+    return {
+        "status": "healthy",
+        "message": "Backend service is up and running"
+    }
+
+
 @app.get("/", tags=["Health"])
 async def root():
     return {
@@ -60,3 +68,4 @@ async def root():
         "message": "Welcome to the Personal Assistant API",
         "debug_mode": settings.DEBUG
     }
+
