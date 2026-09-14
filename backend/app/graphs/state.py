@@ -39,3 +39,7 @@ class WorkflowState(TypedDict):
     reasoning_steps: List[str]
     local_time: Optional[str]
     timezone_offset: Optional[int]
+    project_id: Optional[str]
+    project_title: Optional[str]
+    workspace_projects: Optional[List[Dict[str, Any]]]
+    resolved_project: Optional[Dict[str, Any]]

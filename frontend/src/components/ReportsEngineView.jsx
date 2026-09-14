@@ -115,7 +115,7 @@ export default function ReportsEngineView({ projects = [] }) {
   return (
     <div className="reports-view-container" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '24px', alignItems: 'stretch' }}>
+      <div className="reports-main-grid" style={{ alignItems: 'stretch' }}>
         {/* Form Configurator */}
         <form className="glass-panel" onSubmit={handleGenerate} style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '24px', borderRadius: '16px' }}>
           <div>
@@ -126,7 +126,7 @@ export default function ReportsEngineView({ projects = [] }) {
           {/* Report Type Grid */}
           <div className="form-group">
             <label className="form-label" style={{ marginBottom: '10px' }}>Report Type</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '12px' }}>
+            <div className="reports-type-grid">
               {reportTypes.map(t => {
                 const IconComponent = t.icon;
                 const isSelected = reportType === t.id;
@@ -172,7 +172,7 @@ export default function ReportsEngineView({ projects = [] }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
+          <div className="reports-options-grid">
             {/* Project Context */}
             <div className="form-group" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

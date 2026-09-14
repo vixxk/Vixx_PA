@@ -1,11 +1,11 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
 export const getFileUrl = (fileUrl) => {
   if (!fileUrl) return '';
   let url = fileUrl;
-  if (url.includes('localhost:8000')) {
+  if (url.includes('localhost:8000') || url.includes('localhost:5000')) {
     const base = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
-    url = url.replace('http://localhost:8000', base);
+    url = url.replace(/http:\/\/localhost:(?:8000|5000)/, base);
   }
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
   const base = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
@@ -275,7 +275,7 @@ export const api = {
   },
 
   ai: {
-    process: async (rawInput, googleToken = null, sessionId = null) => {
+    process: async (rawInput, googleToken = null, sessionId = null, projectId = null, projectTitle = null) => {
       const response = await fetch(`${API_BASE_URL}/ai/process`, {
         method: 'POST',
         headers: getHeaders(),
@@ -284,7 +284,9 @@ export const api = {
           google_token: googleToken || localStorage.getItem('google_token'),
           timezone_offset: new Date().getTimezoneOffset(),
           local_time: new Date().toISOString(),
-          session_id: sessionId
+          session_id: sessionId,
+          project_id: projectId && projectId !== 'all' ? projectId : null,
+          project_title: projectTitle || null
         }),
       });
       return handleResponse(response);

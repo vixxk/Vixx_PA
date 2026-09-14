@@ -691,7 +691,7 @@ export default function App() {
                           onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)'; }}
                         >
                           <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{proj.title}</span>
-                          <span className={`badge badge-${proj.status === 'developing' ? 'active' : 'planning'}`} style={{ fontSize: '0.62rem' }}>{proj.status}</span>
+                          <span className={`badge badge-${proj.status === 'finished' || proj.status === 'completed' ? 'finished' : 'active'}`} style={{ fontSize: '0.62rem' }}>{proj.status}</span>
                         </div>
                       ))
                     )}
@@ -717,6 +717,10 @@ export default function App() {
               } else {
                 window.location.hash = '#/projects';
               }
+            }}
+            onUpdateProject={(updatedProj) => {
+              setProjects(prev => prev.map(p => p.id === updatedProj.id ? { ...p, ...updatedProj } : p));
+              setSelectedProject(prev => prev && prev.id === updatedProj.id ? { ...prev, ...updatedProj } : prev);
             }}
           />
         )}

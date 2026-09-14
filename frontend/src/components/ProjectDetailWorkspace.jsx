@@ -24,55 +24,103 @@ import {
 } from 'lucide-react';
 import { api, getFileUrl } from '../services/api';
 
-export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
+export default function ProjectDetailWorkspace({ project, onBack, onRefresh, onUpdateProject }) {
+  const [currentProject, setCurrentProject] = useState(project);
   const [activeSubTab, setActiveSubTab] = useState('contracts_payments'); // board, risks, summary, sync, contracts_payments
   const [notepadText, setNotepadText] = useState(project.notepad || '');
   const [saveStatus, setSaveStatus] = useState(''); // '', 'saving', 'saved', 'error'
 
+  const [isEditingHeader, setIsEditingHeader] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(project.title);
+  const [editedDescription, setEditedDescription] = useState(project.description || '');
+  const [editedStatus, setEditedStatus] = useState(project.status || 'developing');
+
   useEffect(() => {
+    setCurrentProject(project);
     setNotepadText(project.notepad || '');
+    setEditedTitle(project.title);
+    setEditedDescription(project.description || '');
+    setEditedStatus(project.status || 'developing');
   }, [project]);
 
   const handleSaveNotepad = async () => {
+    const prevNotepad = currentProject.notepad || '';
     setSaveStatus('saving');
+    const updatedProject = { ...currentProject, notepad: notepadText };
+    setCurrentProject(updatedProject);
+    if (onUpdateProject) {
+      onUpdateProject(updatedProject);
+    }
     try {
-      await api.projects.update(project.id, { notepad: notepadText });
+      await api.projects.update(currentProject.id, { notepad: notepadText });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus(''), 3000);
-      onRefresh();
+      if (onRefresh) onRefresh();
     } catch (err) {
       console.error(err);
+      setCurrentProject(prev => ({ ...prev, notepad: prevNotepad }));
+      if (onUpdateProject) {
+        onUpdateProject({ ...currentProject, notepad: prevNotepad });
+      }
       setSaveStatus('error');
       setTimeout(() => setSaveStatus(''), 4000);
     }
   };
 
-  const [isEditingHeader, setIsEditingHeader] = useState(false);
-  const [editedTitle, setEditedTitle] = useState(project.title);
-  const [editedDescription, setEditedDescription] = useState(project.description || '');
-  const [editedStatus, setEditedStatus] = useState(project.status || 'planning');
-
-  useEffect(() => {
-    setEditedTitle(project.title);
-    setEditedDescription(project.description || '');
-    setEditedStatus(project.status || 'planning');
-  }, [project]);
-
   const handleSaveHeader = async () => {
-    if (!editedTitle.trim()) {
-      alert('Project title cannot be empty.');
+    const trimmedTitle = editedTitle.trim();
+    if (!trimmedTitle) {
+      if (window.showToast) {
+        window.showToast('Project title cannot be empty.', 'error');
+      } else {
+        alert('Project title cannot be empty.');
+      }
       return;
     }
+
+    const prevProject = { ...currentProject };
+    const updatedData = { 
+      title: trimmedTitle, 
+      description: editedDescription.trim(),
+      status: editedStatus
+    };
+    const optimisticProject = {
+      ...currentProject,
+      ...updatedData
+    };
+
+    // 1. Optimistic UI update: immediately exit edit mode and show updated details
+    setCurrentProject(optimisticProject);
+    setIsEditingHeader(false);
+    if (onUpdateProject) {
+      onUpdateProject(optimisticProject);
+    }
+    if (window.showToast) {
+      window.showToast('Project updated successfully', 'success');
+    }
+
+    // 2. Perform backend API call in background
     try {
-      await api.projects.update(project.id, { 
-        title: editedTitle.trim(), 
-        description: editedDescription.trim(),
-        status: editedStatus
-      });
-      setIsEditingHeader(false);
-      onRefresh();
+      await api.projects.update(currentProject.id, updatedData);
+      if (onRefresh) {
+        onRefresh();
+      }
     } catch (err) {
-      alert('Failed to update project: ' + err.message);
+      // 3. Rollback on failure
+      console.error('Failed to update project:', err);
+      setCurrentProject(prevProject);
+      setEditedTitle(prevProject.title);
+      setEditedDescription(prevProject.description || '');
+      setEditedStatus(prevProject.status || 'developing');
+      setIsEditingHeader(true);
+      if (onUpdateProject) {
+        onUpdateProject(prevProject);
+      }
+      if (window.showToast) {
+        window.showToast('Failed to update project: ' + (err.message || 'Unknown error'), 'error');
+      } else {
+        alert('Failed to update project: ' + (err.message || 'Unknown error'));
+      }
     }
   };
   const [tasks, setTasks] = useState([]);
@@ -85,6 +133,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
   // Contracts & Payments form states
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentType, setPaymentType] = useState('Advance');
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [paymentNotes, setPaymentNotes] = useState('');
   const [clientName, setClientName] = useState('');
   const [contractFile, setContractFile] = useState(null);
@@ -298,19 +347,21 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
     e.preventDefault();
     if (!paymentAmount) return;
     const originalPayments = [...payments];
+    const chosenDate = paymentDate ? new Date(paymentDate + 'T12:00:00Z').toISOString() : new Date().toISOString();
     const tempPayment = {
       id: 'temp-' + Date.now(),
       project_id: project.id,
       amount: parseFloat(paymentAmount),
       currency: 'INR',
       payment_type: paymentType,
-      received_date: new Date().toISOString(),
+      received_date: chosenDate,
       status: 'received',
       notes: paymentNotes
     };
     setPayments(prev => [...prev, tempPayment]);
     setPaymentAmount('');
     setPaymentNotes('');
+    setPaymentDate(new Date().toISOString().split('T')[0]);
     try {
       await api.payments.create({
         project_id: project.id,
@@ -498,7 +549,6 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                       onChange={(e) => setEditedStatus(e.target.value)}
                       style={{ fontSize: '0.9rem', padding: '8px 12px', height: '38px' }}
                     >
-                      <option value="planning">Planning</option>
                       <option value="developing">Developing</option>
                       <option value="finished">Finished</option>
                     </select>
@@ -515,9 +565,9 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                   <button 
                     onClick={() => {
                       setIsEditingHeader(false);
-                      setEditedTitle(project.title);
-                      setEditedDescription(project.description || '');
-                      setEditedStatus(project.status || 'planning');
+                      setEditedTitle(currentProject.title);
+                      setEditedDescription(currentProject.description || '');
+                      setEditedStatus(currentProject.status || 'developing');
                     }} 
                     className="btn btn-secondary"
                     style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -542,23 +592,19 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
             <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <h2 style={{ fontSize: '1.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', margin: 0 }}>
-                  {project.title}
-                  {project.total_amount !== undefined && project.total_amount !== null && (
+                  {currentProject.title}
+                  {currentProject.total_amount !== undefined && currentProject.total_amount !== null && (
                     <span className="badge badge-primary" style={{ fontSize: '0.8rem', padding: '4px 10px', background: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
-                      Value: {Number(project.total_amount).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
+                      Value: {Number(currentProject.total_amount).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
                     </span>
                   )}
                   {(() => {
-                    const status = (project.status || 'planning').toLowerCase();
-                    let color = '#60a5fa';
-                    let bg = 'rgba(96, 165, 250, 0.15)';
-                    let border = '1px solid rgba(96, 165, 250, 0.25)';
+                    const status = (currentProject.status || 'developing').toLowerCase();
+                    let color = '#fbbf24';
+                    let bg = 'rgba(251, 191, 36, 0.15)';
+                    let border = '1px solid rgba(251, 191, 36, 0.25)';
                     
-                    if (status === 'developing') {
-                      color = '#fbbf24';
-                      bg = 'rgba(251, 191, 36, 0.15)';
-                      border = '1px solid rgba(251, 191, 36, 0.25)';
-                    } else if (status === 'finished' || status === 'completed') {
+                    if (status === 'finished' || status === 'completed') {
                       color = '#34d399';
                       bg = 'rgba(52, 211, 153, 0.15)';
                       border = '1px solid rgba(52, 211, 153, 0.25)';
@@ -580,7 +626,12 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                     );
                   })()}
                   <button
-                    onClick={() => setIsEditingHeader(true)}
+                    onClick={() => {
+                      setEditedTitle(currentProject.title);
+                      setEditedDescription(currentProject.description || '');
+                      setEditedStatus(currentProject.status || 'developing');
+                      setIsEditingHeader(true);
+                    }}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -599,7 +650,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                   </button>
                 </h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-                  {project.description || 'No description.'}
+                  {currentProject.description || 'No description.'}
                 </p>
               </div>
             </div>
@@ -642,7 +693,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
       {/* Content panes */}
       {loading ? (
         activeSubTab === 'board' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', alignItems: 'flex-start' }}>
+          <div className="workspace-detail-grid" style={{ alignItems: 'flex-start' }}>
             {/* Skeletons for To-Do tasks column */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="skeleton-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -685,7 +736,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
             </div>
           </div>
         ) : activeSubTab === 'contracts_payments' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+          <div className="workspace-detail-grid">
             {/* Payments column skeleton */}
             <div className="skeleton-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -724,7 +775,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="skeleton-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="skeleton-pulse skeleton-title" style={{ width: '40%', height: '18px', margin: 0 }} />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+              <div className="files-grid">
                 {[1, 2, 3].map(i => (
                   <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div className="skeleton-pulse skeleton-text" style={{ width: '50%', height: '12px' }} />
@@ -738,7 +789,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
       ) : (
         <>
           {activeSubTab === 'board' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', alignItems: 'flex-start' }}>
+            <div className="workspace-detail-grid" style={{ alignItems: 'flex-start' }}>
               
               {/* Left Column: Tasks List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -934,7 +985,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                     />
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="double-form-grid">
                     <div className="form-group" style={{ marginBottom: '12px' }}>
                       <label className="form-label" style={{ fontSize: '0.75rem' }}>Priority</label>
                       <select 
@@ -975,14 +1026,14 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
 
 
           {activeSubTab === 'contracts_payments' && (() => {
-            const totalVal = parseFloat(project.total_amount) || 0;
+            const totalVal = parseFloat(currentProject.total_amount) || 0;
             const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
             const remainingBal = Math.max(0, totalVal - totalPaid);
             const paidPct = totalVal > 0 ? Math.min(100, Math.round((totalPaid / totalVal) * 100)) : 0;
             const remainingPct = 100 - paidPct;
 
             return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', alignItems: 'flex-start' }}>
+              <div className="workspace-detail-grid" style={{ alignItems: 'flex-start' }}>
                 {/* Left Column: Visual Dashboard & Payments list */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                   {/* Financial Overview Card */}
@@ -1053,7 +1104,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                     </div>
 
                     {/* Metrics grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', zIndex: 1 }}>
+                    <div className="sprint-dist-grid" style={{ zIndex: 1 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Project Value</span>
                         <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -1169,7 +1220,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                     <h3 style={{ fontSize: '1.20rem', fontWeight: 600 }}>Log a Payment</h3>
                   </div>
                   <form onSubmit={handleCreatePayment} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className="double-form-grid">
                       <div className="form-group">
                         <label className="form-label" style={{ fontSize: '0.75rem' }}>Amount (INR)</label>
                         <input 
@@ -1195,15 +1246,28 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                         </select>
                       </div>
                     </div>
-                    <div className="form-group">
-                      <label className="form-label" style={{ fontSize: '0.75rem' }}>Notes / Reference</label>
-                      <input 
-                        type="text" 
-                        className="input-field" 
-                        value={paymentNotes} 
-                        onChange={(e) => setPaymentNotes(e.target.value)} 
-                        placeholder="e.g. Milestone 1 completion payment" 
-                      />
+                    <div className="double-form-grid">
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Payment Date</label>
+                        <input 
+                          type="date" 
+                          className="input-field" 
+                          value={paymentDate} 
+                          onChange={(e) => setPaymentDate(e.target.value)}
+                          style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Notes / Reference</label>
+                        <input 
+                          type="text" 
+                          className="input-field" 
+                          value={paymentNotes} 
+                          onChange={(e) => setPaymentNotes(e.target.value)} 
+                          placeholder="e.g. Milestone 1 completion payment" 
+                        />
+                      </div>
                     </div>
                     <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: '6px', height: '40px' }}>
                       <Plus size={14} /> Log Payment
@@ -1215,7 +1279,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
           })()}
 
           {activeSubTab === 'attachments' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', alignItems: 'flex-start' }}>
+            <div className="workspace-detail-grid" style={{ alignItems: 'flex-start' }}>
               {/* Left Column: Pending Things */}
               <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
@@ -1299,7 +1363,7 @@ export default function ProjectDetailWorkspace({ project, onBack, onRefresh }) {
                 {/* Add pending thing form */}
                 <form onSubmit={handleCreatePendingThing} style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px' }}>
                   <h4 style={{ fontSize: '0.95rem', fontWeight: 600 }}>Add a Pending Item / Credential</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="double-form-grid">
                     <div className="form-group">
                       <label className="form-label" style={{ fontSize: '0.75rem' }}>Title (e.g. Stripe API Keys) *</label>
                       <input 

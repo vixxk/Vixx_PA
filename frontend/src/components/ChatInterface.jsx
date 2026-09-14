@@ -25,9 +25,11 @@ import {
   ArrowRight,
   TrendingUp,
   Volume2,
-  Menu
+  Menu,
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
-import { api } from '../services/api';
+import { api, getFileUrl } from '../services/api';
 
 export default function ChatInterface({ projects = [], todos = [], payments = [], onRefreshData }) {
   // Ensure we start a new session ID for this browser tab session if not already initialized
@@ -359,7 +361,14 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
 
     try {
       const googleToken = localStorage.getItem('google_token');
-      const response = await api.ai.process(userText, googleToken, activeChatId);
+      const currentProj = selectedContextId !== 'all' ? projects.find(p => p.id === selectedContextId) : null;
+      const response = await api.ai.process(
+        userText,
+        googleToken,
+        activeChatId,
+        currentProj?.id || null,
+        currentProj?.title || null
+      );
       const responseMsgId = (Date.now() + 1).toString();
       
       const resolvedId = response.session_id || activeChatId;
@@ -412,6 +421,38 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
       ]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (loading || messages.length < 2) return;
+    const lastUserMsg = [...messages].reverse().find(m => m.sender === 'user');
+    if (!lastUserMsg) return;
+    setMessages(prev => {
+      const rev = [...prev];
+      if (rev.length > 0 && rev[rev.length - 1].sender === 'assistant') {
+        return rev.slice(0, -1);
+      }
+      return rev;
+    });
+    await sendMessage(lastUserMsg.text);
+  };
+
+  const handleClearCurrentChat = () => {
+    const doClear = () => {
+      setMessages([
+        {
+          id: 'welcome_' + Date.now(),
+          sender: 'assistant',
+          text: "Vixx AI workspace memory ready. What would you like to work on?",
+          type: 'normal'
+        }
+      ]);
+    };
+    if (window.showConfirm) {
+      window.showConfirm("Clear all messages in this conversation?", doClear);
+    } else {
+      doClear();
     }
   };
 
@@ -542,17 +583,189 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
 
   const renderFormattedText = (text) => {
     if (!text) return null;
-    const lines = text.split('\n');
-    return lines.map((line, lineIdx) => {
-      // Parse markdown links (e.g. [Label](url)) and render as high-fidelity buttons
-      const match = line.match(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/);
-      if (match) {
-        const label = match[1];
-        const url = match[2];
+    const rawLines = text.split('\n');
+    const elements = [];
+    let i = 0;
+
+    while (i < rawLines.length) {
+      const line = rawLines[i];
+
+      // 1. Fenced Code Block
+      if (line.trim().startsWith('```')) {
+        const lang = line.trim().replace(/^```/, '').trim() || 'code';
+        const codeLines = [];
+        i++;
+        while (i < rawLines.length && !rawLines[i].trim().startsWith('```')) {
+          codeLines.push(rawLines[i]);
+          i++;
+        }
+        if (i < rawLines.length && rawLines[i].trim().startsWith('```')) {
+          i++; // skip closing ```
+        }
+        const codeContent = codeLines.join('\n');
+        const codeBlockIdx = elements.length;
+        elements.push(
+          <div key={`code-${codeBlockIdx}`} style={{
+            margin: '10px 0',
+            background: 'rgba(0, 0, 0, 0.45)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '8px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '6px 12px',
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+              fontSize: '0.7rem',
+              color: 'var(--text-muted)',
+              fontFamily: 'monospace'
+            }}>
+              <span>{lang}</span>
+              <button
+                type="button"
+                onClick={() => handleCopyText(codeContent, `code-${codeBlockIdx}`)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: copiedMessageId === `code-${codeBlockIdx}` ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '0.68rem',
+                  padding: '2px 6px',
+                  borderRadius: '4px'
+                }}
+              >
+                {copiedMessageId === `code-${codeBlockIdx}` ? <Check size={11} /> : <Copy size={11} />}
+                <span>{copiedMessageId === `code-${codeBlockIdx}` ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+            <pre style={{
+              margin: 0,
+              padding: '12px',
+              overflowX: 'auto',
+              fontSize: '0.8rem',
+              fontFamily: 'monospace',
+              color: '#38bdf8',
+              lineHeight: '1.4'
+            }}>
+              <code>{codeContent}</code>
+            </pre>
+          </div>
+        );
+        continue;
+      }
+
+      // 2. Markdown Table
+      if (line.includes('|') && i + 1 < rawLines.length && rawLines[i + 1].includes('|') && rawLines[i + 1].includes('-')) {
+        const tableLines = [];
+        while (i < rawLines.length && rawLines[i].includes('|')) {
+          tableLines.push(rawLines[i]);
+          i++;
+        }
+        if (tableLines.length >= 2) {
+          const parseRow = (rowStr) => {
+            const rawCells = rowStr.split('|');
+            if (rawCells.length > 2) {
+              return rawCells.slice(1, -1).map(c => c.trim());
+            }
+            return rawCells.map(c => c.trim()).filter(Boolean);
+          };
+
+          const headers = parseRow(tableLines[0]);
+          const rows = tableLines.slice(2).map(r => parseRow(r)).filter(r => r.length > 0);
+
+          elements.push(
+            <div key={`table-${elements.length}`} style={{
+              margin: '12px 0',
+              overflowX: 'auto',
+              borderRadius: '8px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'rgba(255, 255, 255, 0.015)'
+            }}>
+              <table style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: '0.8rem',
+                textAlign: 'left'
+              }}>
+                <thead>
+                  <tr style={{ background: 'rgba(139, 92, 246, 0.12)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    {headers.map((h, hIdx) => (
+                      <th key={hIdx} style={{ padding: '8px 12px', fontWeight: 600, color: '#fff', fontSize: '0.74rem' }}>
+                        {renderInlineFormatting(h)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, rIdx) => (
+                    <tr key={rIdx} style={{
+                      borderBottom: rIdx < rows.length - 1 ? '1px solid rgba(255, 255, 255, 0.04)' : 'none',
+                      background: rIdx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.015)'
+                    }}>
+                      {row.map((cell, cIdx) => (
+                        <td key={cIdx} style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>
+                          {renderInlineFormatting(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+          continue;
+        }
+      }
+
+      // 3. Horizontal Rule
+      if (/^(\*{3,}|-{3,}|_{3,})$/.test(line.trim())) {
+        elements.push(
+          <hr key={`hr-${elements.length}`} style={{
+            border: 'none',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            margin: '12px 0'
+          }} />
+        );
+        i++;
+        continue;
+      }
+
+      // 4. Blockquote
+      if (line.trim().startsWith('>')) {
+        const quoteText = line.trim().replace(/^>\s*/, '');
+        elements.push(
+          <div key={`quote-${elements.length}`} style={{
+            margin: '8px 0',
+            padding: '8px 14px',
+            background: 'rgba(56, 189, 248, 0.04)',
+            borderLeft: '3px solid var(--accent-cyan)',
+            borderRadius: '0 6px 6px 0',
+            fontSize: '0.84rem',
+            color: 'var(--text-secondary)',
+            fontStyle: 'italic'
+          }}>
+            {renderInlineFormatting(quoteText)}
+          </div>
+        );
+        i++;
+        continue;
+      }
+
+      // 5. Links / Download Buttons
+      const linkMatch = line.match(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/);
+      if (linkMatch) {
+        const label = linkMatch[1];
+        const url = linkMatch[2];
         const isDownload = label.toLowerCase().includes('download') || url.toLowerCase().endsWith('.pdf');
         
-        return (
-          <div key={lineIdx} style={{ margin: '12px 0' }}>
+        elements.push(
+          <div key={`link-${elements.length}`} style={{ margin: '12px 0' }}>
             <a
               href={getFileUrl(url)}
               target="_blank"
@@ -573,23 +786,17 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
                 cursor: 'pointer',
                 border: 'none'
               }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.filter = 'brightness(1.1)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.filter = 'none';
-              }}
             >
               <Download size={14} />
               <span>{label}</span>
             </a>
           </div>
         );
+        i++;
+        continue;
       }
 
-      // Parse general markdown headings: #, ##, ###, ####, #####, ######
+      // 6. Headings
       const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
       if (headingMatch) {
         const level = headingMatch[1].length;
@@ -600,8 +807,8 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
         const borderBottom = level <= 3 ? '1px solid rgba(255,255,255,0.05)' : 'none';
         const paddingBottom = level <= 3 ? '4px' : '0';
         const Tag = `h${level}`;
-        return (
-          <Tag key={lineIdx} style={{ 
+        elements.push(
+          <Tag key={`h-${elements.length}`} style={{ 
             fontSize, 
             fontWeight, 
             color: '#fff', 
@@ -612,14 +819,16 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
             {renderInlineFormatting(headingText)}
           </Tag>
         );
+        i++;
+        continue;
       }
 
-      // Parse bullet points
+      // 7. Bullet points
       const bulletMatch = line.match(/^[-*]\s+(.*)$/);
       if (bulletMatch) {
         const bulletText = bulletMatch[1];
-        return (
-          <div key={lineIdx} style={{ 
+        elements.push(
+          <div key={`bullet-${elements.length}`} style={{ 
             display: 'flex', 
             alignItems: 'flex-start', 
             gap: '8px', 
@@ -631,15 +840,17 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
             <div style={{ flex: 1 }}>{renderInlineFormatting(bulletText)}</div>
           </div>
         );
+        i++;
+        continue;
       }
 
-      // Parse numbered lists
+      // 8. Numbered lists
       const numberListMatch = line.match(/^(\d+)\.\s+(.*)$/);
       if (numberListMatch) {
         const num = numberListMatch[1];
         const itemText = numberListMatch[2];
-        return (
-          <div key={lineIdx} style={{ 
+        elements.push(
+          <div key={`num-${elements.length}`} style={{ 
             display: 'flex', 
             alignItems: 'flex-start', 
             gap: '8px', 
@@ -651,12 +862,20 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
             <div style={{ flex: 1 }}>{renderInlineFormatting(itemText)}</div>
           </div>
         );
+        i++;
+        continue;
       }
+
+      // 9. Blank line
       if (line.trim() === '') {
-        return <div key={lineIdx} style={{ height: '8px' }} />;
+        elements.push(<div key={`blank-${elements.length}`} style={{ height: '8px' }} />);
+        i++;
+        continue;
       }
-      return (
-        <p key={lineIdx} style={{ 
+
+      // 10. Normal text paragraph
+      elements.push(
+        <p key={`p-${elements.length}`} style={{ 
           margin: '0 0 6px 0', 
           fontSize: '0.86rem', 
           color: 'var(--text-secondary)',
@@ -665,12 +884,14 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
           {renderInlineFormatting(line)}
         </p>
       );
-    });
+      i++;
+    }
+
+    return elements;
   };
 
   return (
-    <div className="glass-panel" style={{ 
-      display: 'grid', 
+    <div className="glass-panel chat-interface-grid" style={{ 
       gridTemplateColumns: sidebarOpen ? '240px 1fr 280px' : '1fr 280px', 
       height: '620px', 
       overflow: 'hidden', 
@@ -1029,6 +1250,42 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
                 </>
               )}
             </button>
+            <button
+              type="button"
+              onClick={handleClearCurrentChat}
+              disabled={!messages || messages.length <= 1}
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: '8px',
+                color: 'var(--text-secondary)',
+                fontSize: '0.72rem',
+                padding: '6px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: (!messages || messages.length <= 1) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s',
+                height: '30px',
+                opacity: (!messages || messages.length <= 1) ? 0.5 : 1
+              }}
+              onMouseEnter={e => {
+                if (messages && messages.length > 1) {
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                  e.currentTarget.style.color = '#ef4444';
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                }
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.color = 'var(--text-secondary)';
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+              }}
+              title="Clear messages in current chat"
+            >
+              <RefreshCw size={12} />
+              <span>Clear</span>
+            </button>
 
             {/* Enhanced custom dropdown UI */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }} ref={dropdownRef}>
@@ -1190,38 +1447,65 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
                         <Sparkles size={14} color="var(--accent-primary)" />
                         <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Vixx</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyText(msg.text, msg.id || mIdx)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: copiedMessageId === (msg.id || mIdx) ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '0.7rem',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          transition: 'all 0.25s'
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = copiedMessageId === (msg.id || mIdx) ? 'var(--accent-cyan)' : 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
-                        title="Copy message to clipboard"
-                      >
-                        {copiedMessageId === (msg.id || mIdx) ? (
-                          <>
-                            <Check size={12} color="var(--accent-cyan)" />
-                            <span>Copied!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy size={12} />
-                            <span>Copy</span>
-                          </>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {mIdx === messages.length - 1 && !loading && (
+                          <button
+                            type="button"
+                            onClick={handleRegenerate}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.7rem',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                            title="Regenerate last response"
+                          >
+                            <RotateCcw size={11} />
+                            <span>Retry</span>
+                          </button>
                         )}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText(msg.text, msg.id || mIdx)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: copiedMessageId === (msg.id || mIdx) ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.7rem',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            transition: 'all 0.25s'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.color = copiedMessageId === (msg.id || mIdx) ? 'var(--accent-cyan)' : 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                          title="Copy message to clipboard"
+                        >
+                          {copiedMessageId === (msg.id || mIdx) ? (
+                            <>
+                              <Check size={12} color="var(--accent-cyan)" />
+                              <span>Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={12} />
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
 
                     <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
@@ -1298,7 +1582,7 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
 
         {/* Suggestion Prompts Section (Shown when input is empty and chat is brand new) */}
         {!input.trim() && !loading && messages.length <= 1 && (
-          <div style={{ padding: '0 24px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '14px' }}>
+          <div className="double-form-grid" style={{ padding: '0 24px', marginBottom: '14px' }}>
             {[
               { text: 'Estimate budget details for active projects', label: 'Estimates' },
               { text: 'List today priorities task backlog', label: 'Priorities' },
@@ -1319,10 +1603,67 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
 
         {/* Composer container */}
         <div style={{
-          padding: '16px 24px',
+          padding: '12px 24px 16px 24px',
           borderTop: '1px solid rgba(255,255,255,0.03)',
           background: 'rgba(9, 9, 11, 0.15)'
         }}>
+          {/* Persistent Quick Action Pills */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            overflowX: 'auto',
+            paddingBottom: '10px',
+            scrollbarWidth: 'none'
+          }}>
+            {[
+              { label: '⚡ Daily Briefing', text: "What's on my plate today? Give me an executive briefing." },
+              { label: '📋 Pending Tasks', text: "List all pending tasks with priorities and deadlines." },
+              { label: '💼 Active Projects', text: "List all active projects." },
+              { label: '💳 Financial Status', text: "Show payments logged and financial status." },
+              { label: '⏰ Reminders', text: "List all scheduled reminders." },
+              { label: '📄 PDF Report', text: "Generate report for my projects in navy theme." },
+            ].map((qa, qIdx) => (
+              <button
+                key={qIdx}
+                type="button"
+                onClick={() => sendMessage(qa.text)}
+                disabled={loading}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: '16px',
+                  padding: '4px 10px',
+                  fontSize: '0.72rem',
+                  color: 'var(--text-secondary)',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  opacity: loading ? 0.5 : 1
+                }}
+                onMouseEnter={e => {
+                  if (!loading) {
+                    e.currentTarget.style.background = 'rgba(139, 92, 246, 0.12)';
+                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.3)';
+                    e.currentTarget.style.color = '#fff';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!loading) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+                    e.currentTarget.style.color = 'var(--text-secondary)';
+                  }
+                }}
+              >
+                <span>{qa.label}</span>
+              </button>
+            ))}
+          </div>
+
           <form onSubmit={handleSend} style={{
             display: 'flex',
             alignItems: 'center',

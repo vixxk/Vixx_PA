@@ -206,25 +206,41 @@ async def update_payment(db, user_id, payment_data, raw_input="", session_data=N
     # Keep track of updated payment IDs to prevent updating the same payment multiple times in a batch
     updated_ids = set()
     
+    all_changes = []
     for up_item in updates:
         p_obj = None
         
-        # 1. Match by payment_type if provided
-        target_type = up_item.get("payment_type")
-        if target_type:
+        # 0. Match by old_amount or target_amount if provided (e.g. "change 7000 payment to 8500")
+        target_amount = up_item.get("old_amount") if up_item.get("old_amount") is not None else up_item.get("target_amount")
+        if target_amount is not None:
             for p in payments_list:
-                if p.id not in updated_ids and str(p.payment_type or "").lower() == target_type.lower():
+                if p.id not in updated_ids and abs(float(p.amount) - float(target_amount)) < 0.01:
+                    p_obj = p
+                    break
+
+        # 1. Match by is_latest (e.g. "update last payment")
+        if not p_obj and up_item.get("is_latest"):
+            for p in reversed(payments_list):
+                if p.id not in updated_ids:
+                    p_obj = p
+                    break
+
+        # 2. Match by payment_type if provided
+        target_type = up_item.get("old_payment_type") or up_item.get("payment_type")
+        if not p_obj and target_type:
+            for p in payments_list:
+                if p.id not in updated_ids and str(p.payment_type or "").lower() == str(target_type).lower():
                     p_obj = p
                     break
                     
-        # 2. Match by amount if provided
-        if not p_obj and up_item.get("amount") is not None:
+        # 3. Match by existing amount if changing non-amount fields (e.g. "change status of 5000 payment to received")
+        if not p_obj and up_item.get("amount") is not None and not up_item.get("new_amount") and target_amount is None:
             for p in payments_list:
                 if p.id not in updated_ids and abs(float(p.amount) - float(up_item["amount"])) < 0.01:
                     p_obj = p
                     break
                     
-        # 3. Fallback to index matching if updates length matches list length
+        # 4. Fallback to index matching if updates length matches list length
         if not p_obj and len(updates) == len(payments_list):
             try:
                 idx = updates.index(up_item)
@@ -235,13 +251,28 @@ async def update_payment(db, user_id, payment_data, raw_input="", session_data=N
             except ValueError:
                 pass
                 
-        # 4. Ultimate fallback: if there's only one payment and it hasn't been updated yet
+        # 5. Ultimate fallback: if there's only one payment and it hasn't been updated yet
         if not p_obj and len(payments_list) == 1 and payments_list[0].id not in updated_ids:
             p_obj = payments_list[0]
+
+        # 6. Fallback to most recent payment if ambiguous
+        if not p_obj:
+            for p in reversed(payments_list):
+                if p.id not in updated_ids:
+                    p_obj = p
+                    break
             
         if p_obj:
             updated_ids.add(p_obj.id)
-            if up_item.get("amount") is not None: p_obj.amount = up_item["amount"]
+            item_changes = []
+            new_amount = up_item.get("new_amount") if up_item.get("new_amount") is not None else up_item.get("amount")
+            if new_amount is not None:
+                new_amt_float = float(new_amount)
+                if abs(float(p_obj.amount) - new_amt_float) > 0.01 or target_amount is not None or up_item.get("is_latest"):
+                    old_amt = p_obj.amount
+                    p_obj.amount = new_amt_float
+                    item_changes.append(f"amount from {old_amt:,.2f} to {p_obj.amount:,.2f} INR")
+
             if up_item.get("status") is not None:
                 status_val = str(up_item["status"]).lower()
                 if status_val in ["paid", "completed", "received", "success"]:
@@ -252,16 +283,37 @@ async def update_payment(db, user_id, payment_data, raw_input="", session_data=N
                     p_obj.status = "overdue"
                 else:
                     p_obj.status = up_item["status"]
-            if up_item.get("payment_type") is not None: p_obj.payment_type = up_item["payment_type"]
-            if up_item.get("notes") is not None: p_obj.notes = up_item["notes"]
+                item_changes.append(f"status to '{p_obj.status}'")
+
+            if up_item.get("payment_type") is not None:
+                p_type = str(up_item["payment_type"])
+                p_type_lower = p_type.lower()
+                if "advance" in p_type_lower: p_type = "Advance"
+                elif "final" in p_type_lower: p_type = "Final"
+                elif "partial" in p_type_lower: p_type = "Partial"
+                else: p_type = p_type.capitalize()
+                p_obj.payment_type = p_type
+                item_changes.append(f"payment type to '{p_type}'")
+
+            if up_item.get("notes") is not None:
+                p_obj.notes = up_item["notes"]
+                item_changes.append(f"notes to '{p_obj.notes}'")
+
             if up_item.get("received_date") is not None:
-                try: p_obj.received_date = dateutil.parser.parse(up_item["received_date"])
+                try:
+                    p_obj.received_date = dateutil.parser.parse(str(up_item["received_date"]))
+                    item_changes.append(f"date to {p_obj.received_date.strftime('%b %d, %Y')}")
                 except: pass
+
             updated_count += 1
+            if item_changes:
+                all_changes.append(f"Payment (ID: {p_obj.id}): " + ", ".join(item_changes))
             
     if updated_count > 0:
         await db.commit()
         invalidate_analytics_cache(user_id)
+        if all_changes:
+            return f"Successfully updated payment(s) for project '{project.title}':\n" + "\n".join(f"- {c}" for c in all_changes)
         return f"Updated {updated_count} payment(s) for project '{project.title}'."
         
     return "No matching payment record found to update."
@@ -320,7 +372,7 @@ async def generate_payments_pdf(db, user_id, raw_input="", project_title=None, s
     fname = f"uploads/payments_report_{uid}.pdf"
     os.makedirs("uploads", exist_ok=True)
     generate_payments_report_pdf(data_list, fname, {"title": title_val, "subtitle": f"Total records: {len(data_list)}", "theme": theme, "exclude_notes": exclude_notes, "total_amount": project.total_amount if project else None})
-    url = f"http://localhost:8000/{fname}"
+    url = f"http://localhost:5000/{fname}"
     tbl = "\n### 💳 Payment Details:\n\n| Project | Date | Type | Status | Amount |\n| :--- | :--- | :--- | :--- | :--- |\n"
     for i in data_list:
         dt = i["received_date"] or i["due_date"]

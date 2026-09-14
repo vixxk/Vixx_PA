@@ -12,7 +12,7 @@ class Project(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    status = Column(String(50), nullable=False, default="planning") # planning, developing, finished
+    status = Column(String(50), nullable=False, default="developing") # developing, finished
     priority = Column(String(50), nullable=True, default=None) # low, medium, high, critical
     deadline = Column(DateTime(timezone=True), nullable=True)
     total_amount = Column(Numeric(12, 2), nullable=True, default=0.0)

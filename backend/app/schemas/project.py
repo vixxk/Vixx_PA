@@ -5,14 +5,13 @@ from typing import Optional
 from enum import Enum
 
 class ProjectStatus(str, Enum):
-    planning = "planning"
     developing = "developing"
     finished = "finished"
 
 class ProjectBase(BaseModel):
     title: str
     description: Optional[str] = None
-    status: Optional[ProjectStatus] = ProjectStatus.planning
+    status: Optional[ProjectStatus] = ProjectStatus.developing
     priority: Optional[str] = None
     deadline: Optional[datetime] = None
     total_amount: Optional[float] = 0.0

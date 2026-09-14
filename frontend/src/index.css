@@ -948,7 +948,97 @@ select.input-field option {
 @keyframes scale-up { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes slide-in { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-/* Responsive Media Queries */
+/* Responsive Media Queries & Grid Utilities */
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.payments-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.payments-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.reminders-form-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 16px;
+}
+
+.reminders-inner-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 12px;
+}
+
+.reminders-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.workspace-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.sprint-dist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.double-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.reports-main-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+}
+
+.reports-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.reports-options-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 20px;
+}
+
+.flex-between-responsive {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-interface-grid {
+  display: grid;
+  grid-template-columns: var(--chat-grid-template, 1fr 280px);
+  position: relative;
+}
+
 @media (max-width: 1024px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -968,19 +1058,28 @@ select.input-field option {
     width: 160px;
   }
 
+  .top-bar-system-info {
+    display: none !important;
+  }
+
+  .floating-dock-container {
+    bottom: 12px !important;
+  }
+
   .floating-dock {
-    padding: 6px 12px;
-    gap: 8px;
+    padding: 4px 8px !important;
+    gap: 6px !important;
     border-radius: 18px;
   }
 
   .dock-item {
-    width: 38px;
-    height: 38px;
+    width: 34px !important;
+    height: 34px !important;
   }
 
   .main-content {
     padding: 16px;
+    margin-bottom: 80px;
   }
 
   .stats-bar {
@@ -990,5 +1089,50 @@ select.input-field option {
 
   .kanban-board {
     grid-template-columns: 1fr;
+  }
+
+  .chat-interface-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ai-workspace-sidebar {
+    display: flex !important;
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px !important;
+    max-width: 85vw !important;
+    z-index: 100 !important;
+    background: #171720 !important;
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.85) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .ai-workspace-context {
+    display: none !important;
+  }
+
+  .projects-grid,
+  .payments-stats-grid,
+  .payments-form-grid,
+  .reminders-form-grid,
+  .reminders-inner-grid,
+  .reminders-grid,
+  .workspace-detail-grid,
+  .files-grid,
+  .sprint-dist-grid,
+  .double-form-grid,
+  .reports-main-grid,
+  .reports-type-grid,
+  .reports-options-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .flex-between-responsive {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
   }
 }

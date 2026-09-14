@@ -1,7 +1,16 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
 from typing import AsyncGenerator
+import socket
 from app.config import settings
+
+# Prefer IPv4 address resolution for asyncpg to prevent IPv6 routing timeouts with Neon DB
+_orig_getaddrinfo = socket.getaddrinfo
+def _prefer_ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    if family == socket.AF_UNSPEC or family == 0:
+        family = socket.AF_INET
+    return _orig_getaddrinfo(host, port, family, type, proto, flags)
+socket.getaddrinfo = _prefer_ipv4_getaddrinfo
 
 # Create async engine
 engine = create_async_engine(

@@ -21,6 +21,13 @@ from langchain_core.messages import SystemMessage, HumanMessage
 # Fallback deterministic router — ordered by specificity (more specific intents first)
 # Fallback deterministic router — ordered by specificity (more specific intents first)
 INTENT_KEYWORDS = {
+    "workspace_overview": [
+        "what's on my plate", "whats on my plate", "on my plate", "daily briefing",
+        "briefing", "workspace overview", "workspace summary", "my status",
+        "overall status", "dashboard summary", "summary of my work",
+        "executive summary", "status of everything", "how is everything",
+        "what should i focus on", "focus today", "work overview", "overview",
+    ],
     "generate_report": [
         "pdf", "report", "export", "download report", "generate report",
         "print report", "give me a pdf", "create pdf", "export pdf",
@@ -28,6 +35,10 @@ INTENT_KEYWORDS = {
     "set_reminder": [
         "remind", "reminder", "reminders", "alarm", "alert me", "notify me",
         "notification", "schedule reminder", "ping me", "sms me", "text me",
+    ],
+    "update_timeline": [
+        "milestone", "milestones", "timeline", "checkpoint", "checkpoints",
+        "reschedule milestone", "add milestone", "timeline event",
     ],
     "track_pending": [
         "pending", "credentials", "api keys", "client needs to send",
@@ -52,7 +63,7 @@ INTENT_KEYWORDS = {
         "list finished", "list completed", "list active",
     ],
     "generate_summary": [
-        "summary", "weekly update", "project status update",
+        "weekly update", "project status update",
     ],
 }
 
@@ -81,6 +92,11 @@ def determine_intent_fallback(raw_input: str, history: list = None) -> str:
 async def run_router_agent(state: WorkflowState) -> Dict[str, Any]:
     raw_input = state.get("raw_input", "")
     history = state.get("history") or []
+    raw_lower = raw_input.lower().strip()
+
+    # Fast-path for exact workspace overview keywords
+    if any(phrase in raw_lower for phrase in ["what's on my plate", "whats on my plate", "daily briefing", "workspace overview", "workspace summary", "executive summary", "overview of my work"]):
+        return {"intent": "workspace_overview"}
 
     try:
         llm = get_llm()
@@ -100,10 +116,12 @@ async def run_router_agent(state: WorkflowState) -> Dict[str, Any]:
             "You are a routing agent for Vixx, a Work OS system. Analyze the user's request and "
             "classify it into exactly ONE of these intents:\n\n"
             "INTENTS:\n"
+            "- 'workspace_overview': Daily briefing, 'what's on my plate', overview of projects/tasks/schedules, executive workspace summary.\n"
             "- 'create_project': Create, list, view, delete, or manage PROJECTS.\n"
             "- 'create_task': Create, list, view, update, clear, or delete TASKS/TODOS.\n"
             "- 'track_payment': Log, track, view, update, or delete PAYMENT/FINANCIAL transactions.\n"
             "- 'set_reminder': Set, schedule, view, list, cancel, or delete REMINDERS/ALERTS.\n"
+            "- 'update_timeline': Create, reschedule, list, or manage TIMELINE milestones or checkpoints.\n"
             "- 'track_pending': Create, list, view, complete, or delete PENDING items (things client needs to send, credentials, etc).\n"
             "- 'generate_report': Generate a PDF, report, export, or document.\n"
             "- 'generate_summary': Generate a high-level kickoff summary.\n"
@@ -115,8 +133,9 @@ async def run_router_agent(state: WorkflowState) -> Dict[str, Any]:
             "4. If the user says 'this' or 'that', refer to the conversation context to understand what they mean\n"
             "5. 'remind me' / 'set a reminder' / 'alert me' → ALWAYS 'set_reminder'\n"
             "6. If user asks for list/status/view/deletion of a resource → that resource's intent\n"
-            "7. If the user is setting, discussing, or updating the overall budget, cost, total amount, or value of a project (e.g. 'total amount for mingo is 25000', 'set budget to 50k') → 'create_project' (NOT 'track_payment'). 'track_payment' is only for individual transactions/payments logged.\n"
-            "8. 'list finished/completed/active projects' or 'show finished projects and their revenue' → ALWAYS 'create_project' (NOT 'analytics'). Any query about listing projects by their status goes to 'create_project'.\n"
+            "7. If the user asks for daily briefing, what's on their plate, overall status across workspace → 'workspace_overview'\n"
+            "8. If the user is setting, discussing, or updating the overall budget, cost, total amount, or value of a project (e.g. 'total amount for mingo is 25000', 'set budget to 50k') → 'create_project' (NOT 'track_payment'). 'track_payment' is only for individual transactions/payments logged.\n"
+            "9. 'list finished/completed/active projects' or 'show finished projects and their revenue' → ALWAYS 'create_project' (NOT 'analytics'). Any query about listing projects by their status goes to 'create_project'.\n"
             f"{history_context}\n\n"
             "Respond ONLY with JSON: {\"intent\": \"one_of_the_above_intents\"}"
         )
@@ -132,7 +151,8 @@ async def run_router_agent(state: WorkflowState) -> Dict[str, Any]:
 
         messages.append(HumanMessage(content=raw_input))
 
-        response = await llm.ainvoke(messages)
+        from app.utils.llm import invoke_llm_with_fallback
+        response = await invoke_llm_with_fallback(messages)
         content = response.content.strip()
 
         match = re.search(r"\{.*\}", content, re.DOTALL)

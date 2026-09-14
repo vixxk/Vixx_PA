@@ -70,6 +70,44 @@ async def complete_pending(db, user_id, pending_data):
     return f"Successfully marked pending item '{pt_obj.title}' as completed."
 
 
+async def update_pending(db, user_id, pending_data, raw_input=""):
+    projects, proj_ids = await _get_user_projects_and_ids(db, user_id)
+    if not proj_ids: return "No projects found."
+    pt_title = pending_data.get("title")
+    if not pt_title: return "Please specify which pending item to update."
+    pt_obj = await resolve_pending_item(db, proj_ids, pt_title)
+    if not pt_obj: return f"Pending item '{pt_title}' not found."
+
+    changes = []
+    if pending_data.get("new_title"):
+        old_title = pt_obj.title
+        pt_obj.title = pending_data["new_title"]
+        changes.append(f"title from '{old_title}' to '{pt_obj.title}'")
+
+    if pending_data.get("description") is not None:
+        pt_obj.description = pending_data["description"]
+        changes.append("description")
+
+    if pending_data.get("is_completed") is not None:
+        pt_obj.is_completed = bool(pending_data["is_completed"])
+        changes.append("marked as completed" if pt_obj.is_completed else "marked as pending")
+
+    if pending_data.get("new_project_title") or (pending_data.get("project_title") and pending_data.get("action") == "update"):
+        target_proj_name = pending_data.get("new_project_title") or pending_data.get("project_title")
+        new_proj = await resolve_project_from_context(db, user_id, raw_input, extracted_title=target_proj_name)
+        if new_proj and new_proj.id != pt_obj.project_id:
+            pt_obj.project_id = new_proj.id
+            changes.append(f"moved to project '{new_proj.title}'")
+
+    await db.commit()
+    invalidate_analytics_cache(user_id)
+    await db.refresh(pt_obj)
+
+    if changes:
+        return f"Successfully updated pending item '{pt_obj.title}': {', '.join(changes)}."
+    return f"Pending item '{pt_obj.title}' is already up to date."
+
+
 async def delete_pending(db, user_id, pending_data, confirmed=False):
     projects, proj_ids = await _get_user_projects_and_ids(db, user_id)
     pt_title = pending_data.get("title")

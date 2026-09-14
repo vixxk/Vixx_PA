@@ -8,7 +8,8 @@ export default function ProjectsView({
   onRefresh, 
   loading = false,
   selectedProject,
-  setSelectedProject
+  setSelectedProject,
+  onUpdateProject
 }) {
   const [localProjects, setLocalProjects] = useState(projects);
   
@@ -34,7 +35,7 @@ export default function ProjectsView({
       await api.projects.create({
         title,
         description,
-        status: 'planning',
+        status: 'developing',
         total_amount: totalAmount ? parseFloat(totalAmount) : 0.0
       });
       setTitle('');
@@ -74,6 +75,11 @@ export default function ProjectsView({
         project={selectedProject} 
         onBack={() => setSelectedProject(null)} 
         onRefresh={onRefresh} 
+        onUpdateProject={(updatedProj) => {
+          if (setSelectedProject) setSelectedProject(updatedProj);
+          setLocalProjects(prev => prev.map(p => p.id === updatedProj.id ? { ...p, ...updatedProj } : p));
+          if (onUpdateProject) onUpdateProject(updatedProj);
+        }}
       />
     );
   }
@@ -166,11 +172,7 @@ export default function ProjectsView({
         </div>
       )}
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-        gap: '24px'
-      }}>
+      <div className="projects-grid">
         {localProjects.length === 0 ? (
           <div className="glass-panel" style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
             No projects found. Use the AI command panel or click "New Project" to start.
@@ -226,16 +228,12 @@ export default function ProjectsView({
                   
                   {/* Status Badge */}
                   {(() => {
-                    const status = (proj.status || 'planning').toLowerCase();
-                    let color = '#60a5fa';
-                    let bg = 'rgba(96, 165, 250, 0.15)';
-                    let border = '1px solid rgba(96, 165, 250, 0.25)';
+                    const status = (proj.status || 'developing').toLowerCase();
+                    let color = '#fbbf24';
+                    let bg = 'rgba(251, 191, 36, 0.15)';
+                    let border = '1px solid rgba(251, 191, 36, 0.25)';
                     
-                    if (status === 'developing') {
-                      color = '#fbbf24';
-                      bg = 'rgba(251, 191, 36, 0.15)';
-                      border = '1px solid rgba(251, 191, 36, 0.25)';
-                    } else if (status === 'finished' || status === 'completed') {
+                    if (status === 'finished' || status === 'completed') {
                       color = '#34d399';
                       bg = 'rgba(52, 211, 153, 0.15)';
                       border = '1px solid rgba(52, 211, 153, 0.25)';

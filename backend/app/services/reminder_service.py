@@ -77,3 +77,50 @@ async def clear_all_reminders(db, user_id):
     for r in reminders: r.status = "cancelled"
     await db.commit()
     return f"Cancelled all {count} active reminders."
+
+
+async def update_reminder(db, user_id, reminder_data, timezone_offset=None):
+    title = reminder_data.get("title")
+    stmt = select(Reminder).filter(Reminder.user_id == user_id, Reminder.status == "pending")
+    if title:
+        stmt = stmt.filter(Reminder.title.ilike(f"%{title}%"))
+    stmt = stmt.order_by(Reminder.created_at.desc())
+    r_obj = (await db.execute(stmt)).scalars().first()
+
+    if not r_obj:
+        return f"Reminder '{title or 'specified'}' not found."
+
+    changes = []
+    if reminder_data.get("new_title"):
+        old_t = r_obj.title
+        r_obj.title = reminder_data["new_title"]
+        changes.append(f"title from '{old_t}' to '{r_obj.title}'")
+
+    if reminder_data.get("description") is not None:
+        r_obj.description = reminder_data["description"]
+        changes.append("description")
+
+    if reminder_data.get("remind_at"):
+        try:
+            parsed_dt = dateutil.parser.parse(str(reminder_data["remind_at"]))
+            r_obj.remind_at = localize_to_utc(parsed_dt, timezone_offset)
+            changes.append(f"time to {parsed_dt.strftime('%b %d, %Y at %I:%M %p')}")
+        except Exception:
+            pass
+
+    if reminder_data.get("channel"):
+        ch = str(reminder_data["channel"]).lower()
+        if ch in ("sms", "email", "both"):
+            r_obj.channel = ch
+            changes.append(f"channel to {ch}")
+
+    if reminder_data.get("status"):
+        r_obj.status = reminder_data["status"]
+        changes.append(f"status to {r_obj.status}")
+
+    await db.commit()
+    await db.refresh(r_obj)
+
+    if changes:
+        return f"Successfully updated reminder '{r_obj.title}': {', '.join(changes)}."
+    return f"Reminder '{r_obj.title}' is already up to date."

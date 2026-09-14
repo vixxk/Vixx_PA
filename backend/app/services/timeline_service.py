@@ -62,3 +62,51 @@ async def delete_timeline(db, user_id, confirmed=False):
     for ev in events: await db.delete(ev)
     await db.commit()
     return {"needs_confirmation": False, "message": f"Successfully cleared all {count} timeline events."}
+
+
+async def update_timeline_event(db, user_id, event_data, raw_input=""):
+    proj_ids_stmt = select(Project.id).filter(Project.user_id == user_id)
+    proj_ids = [row[0] for row in (await db.execute(proj_ids_stmt)).all()]
+    if not proj_ids: return "No projects found."
+
+    event_name = event_data.get("event_name")
+    stmt = select(TimelineEvent).filter(TimelineEvent.project_id.in_(proj_ids))
+    if event_name:
+        stmt = stmt.filter(TimelineEvent.event_name.ilike(f"%{event_name}%"))
+    stmt = stmt.order_by(TimelineEvent.created_at.desc())
+    ev_obj = (await db.execute(stmt)).scalars().first()
+
+    if not ev_obj:
+        return f"Timeline milestone '{event_name or 'to update'}' not found."
+
+    changes = []
+    if event_data.get("new_event_name"):
+        old_n = ev_obj.event_name
+        ev_obj.event_name = event_data["new_event_name"]
+        changes.append(f"name from '{old_n}' to '{ev_obj.event_name}'")
+
+    if event_data.get("event_date"):
+        try:
+            ev_obj.event_date = dateutil.parser.parse(str(event_data["event_date"]))
+            changes.append(f"date to {ev_obj.event_date.strftime('%b %d, %Y')}")
+        except Exception:
+            pass
+
+    if event_data.get("event_type"):
+        ev_obj.event_type = event_data["event_type"]
+        changes.append(f"type to '{ev_obj.event_type}'")
+
+    if event_data.get("notes") is not None:
+        ev_obj.notes = event_data["notes"]
+        changes.append("notes")
+
+    if event_data.get("status"):
+        ev_obj.status = event_data["status"]
+        changes.append(f"status to '{ev_obj.status}'")
+
+    await db.commit()
+    await db.refresh(ev_obj)
+
+    if changes:
+        return f"Successfully updated timeline milestone '{ev_obj.event_name}': {', '.join(changes)}."
+    return f"Timeline milestone '{ev_obj.event_name}' is already up to date."

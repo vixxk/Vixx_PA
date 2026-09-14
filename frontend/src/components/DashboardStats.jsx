@@ -1,9 +1,9 @@
 import React from 'react';
-import { Briefcase, CheckSquare, Calendar } from 'lucide-react';
+import { Briefcase, CheckCircle2, Calendar } from 'lucide-react';
 
 export default function DashboardStats({ projects = [], todos = [], events = [] }) {
   const activeProjects = projects.filter(p => p.status !== 'completed' && p.status !== 'finished').length;
-  const pendingTodos = todos.filter(t => t.status !== 'done').length;
+  const completedProjects = projects.filter(p => p.status === 'completed' || p.status === 'finished').length;
   const completedEvents = events.filter(e => e.status === 'completed').length;
 
   return (
@@ -18,10 +18,10 @@ export default function DashboardStats({ projects = [], todos = [], events = [] 
 
       <div className="glass-panel stat-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="stat-label">Pending Tasks</span>
-          <CheckSquare size={20} color="var(--accent-secondary)" />
+          <span className="stat-label">Completed Projects</span>
+          <CheckCircle2 size={20} color="#10b981" />
         </div>
-        <span className="stat-value">{pendingTodos}</span>
+        <span className="stat-value">{completedProjects}</span>
       </div>
 
       <div className="glass-panel stat-card">

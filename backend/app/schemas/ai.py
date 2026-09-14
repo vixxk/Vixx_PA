@@ -7,6 +7,8 @@ class AIProcessRequest(BaseModel):
     timezone_offset: Optional[int] = None
     local_time: Optional[str] = None
     session_id: Optional[str] = None
+    project_id: Optional[str] = None
+    project_title: Optional[str] = None
 
 
 class AIFeedbackRequest(BaseModel):

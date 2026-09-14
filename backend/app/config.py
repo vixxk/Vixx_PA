@@ -2,13 +2,15 @@ import json
 from typing import List, Union
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Populate os.environ with variables from .env
-load_dotenv(override=True)
+# Ensure backend/.env is always loaded regardless of working directory
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=_env_path, override=True)
 
 class Settings(BaseSettings):
-    PORT: int = 8000
+    PORT: int = 5000
     HOST: str = "0.0.0.0"
     DEBUG: bool = True
 
@@ -38,7 +40,7 @@ class Settings(BaseSettings):
 
     # AI Keys
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "qwen/qwen3.8-27b"
 
     # Google Sync
     GOOGLE_CLIENT_ID: str = ""
@@ -72,7 +74,7 @@ class Settings(BaseSettings):
         return v
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_env_path),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore"

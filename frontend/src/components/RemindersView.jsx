@@ -438,10 +438,10 @@ export default function RemindersView({ onRefresh }) {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '16px' }}>
+            <div className="reminders-form-grid">
               <div className="form-group">
                 <label className="form-label">When to remind</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '12px' }}>
+                <div className="reminders-inner-grid">
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <Calendar 
                       size={16} 
@@ -508,7 +508,7 @@ export default function RemindersView({ onRefresh }) {
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Clock size={16} style={{ color: '#fbbf24' }} /> Upcoming Reminders ({pending.length})
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+          <div className="reminders-grid">
             {pending.map(r => {
               const isOvd = isOverdue(r.remind_at);
               const statColor = isOvd ? '#ef4444' : '#fbbf24';
@@ -624,7 +624,7 @@ export default function RemindersView({ onRefresh }) {
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-secondary)' }}>
             Execution History ({past.length})
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+          <div className="reminders-grid">
             {past.map(r => {
               const statColor = r.status === 'sent' ? '#10b981' : r.status === 'failed' ? '#ef4444' : r.status === 'cancelled' ? '#9ca3af' : '#fbbf24';
               const statShadow = r.status === 'sent' 

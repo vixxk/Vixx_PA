@@ -12,10 +12,13 @@ Key improvements:
 
 import json
 import re
+import logging
 from typing import Dict, Any
 from app.graphs.state import WorkflowState
 from app.utils.llm import get_llm
 from langchain_core.messages import SystemMessage, HumanMessage
+
+logger = logging.getLogger(__name__)
 
 
 def is_list_query(raw_input: str) -> bool:
@@ -53,7 +56,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
     client = state.get("client") or {"action": "create", "name": None, "email": None, "phone": None, "company": None, "notes": None, "priority_score": None}
     analytics = state.get("analytics") or {"action": "dashboard", "project_title": None}
 
-    if intent not in ["create_project", "create_task", "track_payment", "set_reminder", "track_pending", "generate_report", "manage_client", "analytics"]:
+    if intent not in ["create_project", "create_task", "track_payment", "set_reminder", "track_pending", "generate_report", "manage_client", "analytics", "update_timeline", "manage_timeline"]:
         return {}
 
     try:
@@ -87,17 +90,29 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
         )
 
         llm = get_llm()
+        from app.utils.llm import invoke_llm_with_fallback
+        from app.agents.entity_resolver import resolve_project_from_text, parse_amount_from_text, parse_date_from_text
+
+        workspace_projects = state.get("workspace_projects") or []
+        known_project_names = [p["title"] for p in workspace_projects if p.get("title")]
+        projects_context = ""
+        if known_project_names:
+            projects_context = (
+                f"\nExisting Workspace Projects (match user mentions to these exact names where appropriate):\n"
+                f"- {', '.join(known_project_names)}\n"
+            )
 
         if intent == "set_reminder":
             system_prompt = (
-                "You are a requirements extraction agent. Extract structured details for setting a reminder.\n\n"
+                "You are a requirements extraction agent. Extract structured details for creating, updating, or managing a reminder.\n\n"
                 f"Date Calculation Context:\n{date_context}\n"
                 "Extract these fields:\n"
-                "- action: 'create', 'list', 'delete', 'clear', 'update' (default 'create')\n"
-                "- title: what the reminder is about. Strip generic terms like 'reminder'.\n"
+                "- action: 'create', 'update', 'list', 'delete', 'clear', 'cancel' (default 'create'; set 'update' if user says 'reschedule', 'change reminder', 'update reminder', 'move reminder')\n"
+                "- title: what the reminder is about. (For updates, this is the existing reminder title)\n"
+                "- new_title: new title if renaming the reminder\n"
                 "- description: optional extra detail\n"
-                "- remind_at: ISO 8601 datetime. Parse relative times using the Date Context above.\n"
-                "- channel: 'sms', 'email', or 'both'. IMPORTANT: Only extract 'both' if the user explicitly requests to receive the reminder on BOTH channels (e.g. 'both', 'via sms and email', etc.). Otherwise, default to 'sms' (or extract 'email' if they explicitly mentioned email only).\n\n"
+                "- remind_at: ISO 8601 datetime. (For updates, this is the new rescheduled time). Parse relative times using the Date Context above.\n"
+                "- channel: 'sms', 'email', or 'both'. Only extract 'both' if explicitly requested.\n\n"
                 "Respond ONLY with a JSON object."
             )
         elif intent == "generate_report":
@@ -115,6 +130,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
 
             system_prompt = (
                 "You are a requirements extraction agent. Extract details for generating a PDF report.\n\n"
+                f"{projects_context}\n"
                 f"{context_hint}\n"
                 "Extract these fields:\n"
                 "- report_type: 'payments', 'tasks', 'project', 'invoice', 'overview', or 'auto'\n"
@@ -152,6 +168,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
         elif intent == "analytics":
             system_prompt = (
                 "You are a requirements extraction agent. Extract details for viewing analytics.\n\n"
+                f"{projects_context}\n"
                 "Extract these fields:\n"
                 "- action: 'dashboard', 'summary', 'health', 'workload' (default 'dashboard')\n"
                 "- project_title: specific project title if filtering by a project (null if all projects)\n\n"
@@ -161,20 +178,23 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
             system_prompt = (
                 "You are a requirements extraction agent for a Work OS. Extract structured details.\n\n"
                 f"Date Calculation Context:\n{date_context}\n"
+                f"{projects_context}\n"
                 f"User Intent: {intent}\n\n"
                 "Extract details based on the intent:\n"
-                "- For 'create_project': Extract action ('create', 'update', 'delete', 'clear', 'empty', 'read', 'list', 'query'), title, new_title (if renaming a project, e.g., 'rename X to Y' -> title='X', new_title='Y'), description, status (strictly one of the project status enum values: 'planning', 'developing', or 'finished'; map 'completed'/'active'/'done'/'on hold' to these accordingly), total_amount (budget or project value as a float/number), notepad (any notes, details, brief, notepad contents or updates). ALSO, if user mentions any initial or advance payment (e.g. 'advance payment of 5000 received on 14th June'), extract it into a nested 'payment' object with: 'amount' (float), 'currency' (default 'INR'), 'payment_type' (e.g. 'Advance'), 'status' ('received'), 'received_date' (date string), and 'notes'. If updating status or values of MULTIPLE projects at once (e.g. 'mark apniestate as finished and rest as developing'), extract a list/array under the 'updates' key, where each item in the array is an object with: 'title' (project name, or 'rest'/'others' to represent all other projects), and the properties to change (e.g., 'status', 'description', 'total_amount'). Example: 'mark apniestate as finished and rest as developing' -> action='update', updates=[{'title': 'apniestate', 'status': 'finished'}, {'title': 'rest', 'status': 'developing'}].\n"
-                "  IMPORTANT: For project titles, extract ONLY the actual name (e.g. 'Alpha project' → 'Alpha').\n"
-                "  IMPORTANT: If user wants to DELETE MULTIPLE projects, also extract 'exclude_names' as a list of project names to KEEP.\n"
-                "  Example: 'remove every project named acme except acme pdf project' → action='delete', title='acme', exclude_names=['acme pdf project']\n"
-                "- For 'create_task': Extract action ('create', 'update', 'delete', 'clear', 'empty', 'read', 'list', 'query', 'complete', 'generate_pdf'), title, description, priority, status, project_title, due_date, estimated_hours.\n"
-                "- For 'track_pending': Extract action ('create', 'update', 'delete', 'clear', 'read', 'list', 'query', 'complete'), title, description, project_title, is_completed.\n"
-                "- For 'track_payment': Extract action ('create', 'update', 'delete', 'clear', 'empty', 'read', 'list', 'query', 'sync', 'generate_pdf'), project_title, amount, currency (default INR), payment_type, status, received_date, notes.\n"
-                "  IMPORTANT: If user says 'add', 'log', or 'record' → action='create'. Only 'edit'/'modify'/'correct'/'change' → 'update'.\n\n"
+                "- For 'create_project': Extract action ('create', 'update', 'delete', 'clear', 'empty', 'read', 'list', 'query'), title, new_title (if renaming a project, e.g. 'rename X to Y' -> title='X', new_title='Y'), description, status (strictly one of: 'developing' or 'finished'; map 'completed'/'active'/'done'/'on hold' accordingly), total_amount (budget or project value as a float/number), notepad (notes or notepad contents). ALSO, if user mentions initial/advance payment, extract into nested 'payment'. If updating multiple projects, extract into 'updates' list.\n"
+                "  IMPORTANT: If user says 'rename project X to Y', 'change budget of X to Y', 'mark X as finished', action='update'.\n"
+                "- For 'create_task': Extract action ('create', 'update', 'delete', 'clear', 'empty', 'read', 'list', 'query', 'complete', 'generate_pdf'), title (existing task name), new_title (if renaming task, e.g. 'rename task X to Y' -> title='X', new_title='Y'), description, priority ('low', 'medium', 'high', 'critical'), status ('todo', 'in_progress', 'done', 'completed'), project_title, new_project_title (if moving task to another project), due_date, estimated_hours (float/number).\n"
+                "  IMPORTANT: If user says 'mark task X as done', 'complete task X', 'change priority of X to high', 'rename task X to Y', 'move task X to project Y' → action='update'.\n"
+                "- For 'track_pending': Extract action ('create', 'update', 'delete', 'clear', 'read', 'list', 'query', 'complete'), title, new_title (if renaming), description, project_title, is_completed (boolean).\n"
+                "  IMPORTANT: If user says 'mark pending X as done' or 'update pending item X' → action='update' (or 'complete').\n"
+                "- For 'track_payment': Extract action ('create', 'update', 'delete', 'clear', 'empty', 'read', 'list', 'query', 'sync', 'generate_pdf'), project_title, amount (the new or updated amount), old_amount / target_amount (the previous amount being changed, e.g. 'change 7000 payment to 8500' -> old_amount=7000, amount=8500), payment_type ('Advance', 'Final', 'Partial'), status ('received', 'pending'), received_date, notes, is_latest (boolean, True if user says 'update last payment' or 'change latest payment').\n"
+                "  IMPORTANT: If user says 'change payment of X to Y', 'update last payment to Y', 'change payment date to D' → action='update'.\n"
+                "- For 'update_timeline': Extract action ('create', 'update', 'delete', 'clear', 'read', 'list'), event_name (milestone name), new_event_name (if renaming), event_type ('milestone', 'checkpoint'), event_date (new date if rescheduling), notes, status ('pending', 'completed').\n"
+                "  IMPORTANT: If user says 'reschedule milestone X to date D', 'postpone milestone X', or 'move milestone X' → action='update'.\n\n"
                 "CONTEXT & MEMORY RULES:\n"
-                "1. Read the conversation history context to resolve references like 'this', 'that', 'its', 'first one', 'next', 'the project', etc.\n"
-                "2. If the user is modifying or correcting previous statements (e.g. 'only the first one is advance, next is first installment'), extract the resolved project_title and amount from the conversation history.\n"
-                "3. Set action='update' if the user is correcting or modifying a previously created item.\n\n"
+                "1. Read conversation history to resolve references like 'this', 'that', 'its', 'first one', 'next', 'the project', etc.\n"
+                "2. If user is modifying or correcting previous statements, extract resolved project_title and amount from conversation history.\n"
+                "3. Set action='update' if user is modifying, editing, renaming, rescheduling, or correcting an existing item.\n\n"
                 "Use Date Context to translate relative dates. Format output as JSON. Set null for missing properties."
             )
 
@@ -189,7 +209,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                 messages.append(AIMessage(content=msg["content"]))
                 
         messages.append(HumanMessage(content=f"User request: {raw_input}"))
-        response = await llm.ainvoke(messages)
+        response = await invoke_llm_with_fallback(messages)
         content = response.content.strip()
 
         extracted = {}
@@ -289,27 +309,31 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                             todos.append({
                                 "action": t_item.get("action") or extracted.get("action") or "create",
                                 "title": t_item.get("title"),
+                                "new_title": t_item.get("new_title"),
                                 "description": t_item.get("description"),
                                 "priority": t_item.get("priority") or "medium",
                                 "status": t_item.get("status") or "todo",
                                 "project_title": t_item.get("project_title") or extracted.get("project_title"),
+                                "new_project_title": t_item.get("new_project_title"),
                                 "due_date": t_item.get("due_date"),
                                 "estimated_hours": t_item.get("estimated_hours"),
                             })
                 else:
                     if todos:
                         last_todo = todos[-1]
-                        for key in ["action", "title", "description", "priority", "status", "project_title", "due_date", "estimated_hours"]:
+                        for key in ["action", "title", "new_title", "description", "priority", "status", "project_title", "new_project_title", "due_date", "estimated_hours"]:
                             if extracted.get(key) is not None:
                                 last_todo[key] = extracted[key]
                     else:
                         todos.append({
                             "action": extracted.get("action") or "create",
                             "title": extracted.get("title"),
+                            "new_title": extracted.get("new_title"),
                             "description": extracted.get("description"),
                             "priority": extracted.get("priority") or "medium",
                             "status": extracted.get("status") or "todo",
                             "project_title": extracted.get("project_title"),
+                            "new_project_title": extracted.get("new_project_title"),
                             "due_date": extracted.get("due_date"),
                             "estimated_hours": extracted.get("estimated_hours"),
                         })
@@ -320,6 +344,7 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                             timeline.append({
                                 "action": e_item.get("action") or extracted.get("action") or "create",
                                 "event_name": e_item.get("event_name"),
+                                "new_event_name": e_item.get("new_event_name"),
                                 "event_type": e_item.get("event_type") or "milestone",
                                 "event_date": e_item.get("event_date"),
                                 "notes": e_item.get("notes"),
@@ -327,19 +352,20 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                 else:
                     if timeline:
                         last_event = timeline[-1]
-                        for key in ["action", "event_name", "event_type", "event_date", "notes"]:
+                        for key in ["action", "event_name", "new_event_name", "event_type", "event_date", "notes"]:
                             if extracted.get(key) is not None:
                                 last_event[key] = extracted[key]
                     else:
                         timeline.append({
                             "action": extracted.get("action") or "create",
                             "event_name": extracted.get("event_name"),
+                            "new_event_name": extracted.get("new_event_name"),
                             "event_type": extracted.get("event_type") or "milestone",
                             "event_date": extracted.get("event_date"),
                             "notes": extracted.get("notes"),
                         })
             elif intent == "track_payment":
-                for key in ["action", "project_title", "amount", "currency", "payment_type", "status", "received_date", "notes", "payments"]:
+                for key in ["action", "project_title", "amount", "old_amount", "target_amount", "is_latest", "currency", "payment_type", "status", "received_date", "notes", "payments"]:
                     if extracted.get(key) is not None:
                         payment[key] = extracted[key]
                 if "payments" in extracted and isinstance(extracted["payments"], list) and extracted["payments"]:
@@ -348,9 +374,17 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                         if payment.get(k) is None and isinstance(first_p, dict):
                             payment[k] = first_p.get(k)
             elif intent == "track_pending":
-                for key in ["action", "title", "description", "project_title", "is_completed"]:
+                for key in ["action", "title", "new_title", "description", "project_title", "is_completed"]:
                     if extracted.get(key) is not None:
                         pending[key] = extracted[key]
+            elif intent in ["update_timeline", "manage_timeline"]:
+                tl_item = {"action": extracted.get("action") or "create"}
+                for key in ["event_name", "new_event_name", "event_type", "event_date", "notes", "status"]:
+                    if extracted.get(key) is not None:
+                        tl_item[key] = extracted[key]
+                if not tl_item.get("event_name") and extracted.get("title"):
+                    tl_item["event_name"] = extracted["title"]
+                timeline.append(tl_item)
             elif intent == "manage_client":
                 for key in ["action", "name", "email", "phone", "company", "notes", "priority_score"]:
                     if extracted.get(key) is not None:
@@ -372,6 +406,140 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
             title_match = re.search(r"(?:project called|project|called)\s+([A-Za-z0-9_\-\s]+)", raw_input, re.IGNORECASE)
             if title_match:
                 project_data["title"] = title_match.group(1).replace(" project", "").strip()
+
+    # ── Intelligent Entity Resolution & Workspace Matching ──
+    from app.agents.entity_resolver import resolve_project_from_text, parse_amount_from_text, parse_date_from_text, parse_update_amounts, parse_rename_pattern
+    workspace_projects = state.get("workspace_projects") or []
+    active_project_title = state.get("project_title")
+
+    matched_project = resolve_project_from_text(raw_input, workspace_projects, active_project_title)
+    if matched_project:
+        resolved_title = matched_project["title"]
+        if intent == "track_payment" and not payment.get("project_title"):
+            payment["project_title"] = resolved_title
+        elif intent == "create_task":
+            if todos and isinstance(todos, list) and not todos[-1].get("project_title"):
+                todos[-1]["project_title"] = resolved_title
+            elif not todos:
+                todos.append({"action": "create", "project_title": resolved_title})
+        elif intent == "create_project":
+            if project_data.get("action") == "update" or any(w in raw_input.lower() for w in ["budget", "cost", "total amount", "value", "status"]):
+                project_data["title"] = resolved_title
+                if "rename" not in raw_input.lower():
+                    project_data["new_title"] = None
+        elif intent == "track_pending" and not pending.get("project_title"):
+            pending["project_title"] = resolved_title
+        elif intent == "generate_report" and not report.get("project_title"):
+            report["project_title"] = resolved_title
+
+    # Smart heuristics for payment updates, amounts & dates
+    if intent == "track_payment":
+        old_amt, new_amt = parse_update_amounts(raw_input)
+        if new_amt is not None:
+            if any(w in raw_input.lower() for w in ["change", "update", "edit", "modify", "set"]):
+                payment["action"] = "update"
+                payment["amount"] = new_amt
+                if old_amt is not None:
+                    payment["old_amount"] = old_amt
+            elif payment.get("amount") is None:
+                payment["amount"] = new_amt
+        elif payment.get("amount") is None:
+            parsed_amt = parse_amount_from_text(raw_input)
+            if parsed_amt is not None:
+                payment["amount"] = parsed_amt
+
+        if any(w in raw_input.lower() for w in ["last payment", "latest payment", "recent payment"]):
+            payment["is_latest"] = True
+            payment["action"] = "update"
+
+        if payment.get("received_date") is None:
+            parsed_d = parse_date_from_text(raw_input, local_dt if 'local_dt' in locals() else datetime.now())
+            if parsed_d:
+                payment["received_date"] = parsed_d
+
+    # Smart heuristics for task updates & renames
+    if intent == "create_task":
+        old_n, new_n = parse_rename_pattern(raw_input)
+        if old_n and new_n:
+            if todos and isinstance(todos, list):
+                todos[-1]["action"] = "update"
+                todos[-1]["title"] = old_n
+                todos[-1]["new_title"] = new_n
+        if any(w in raw_input.lower() for w in ["complete", "mark done", "mark as done", "mark completed"]):
+            if todos and isinstance(todos, list):
+                todos[-1]["action"] = "update"
+                todos[-1]["status"] = "done"
+
+    # Smart heuristics for project renames & budget updates
+    if intent == "create_project":
+        old_n, new_n = parse_rename_pattern(raw_input)
+        if old_n and new_n:
+            project_data["action"] = "update"
+            project_data["title"] = old_n
+            project_data["new_title"] = new_n
+        if any(w in raw_input.lower() for w in ["budget", "cost", "total amount", "value"]):
+            parsed_amt = parse_amount_from_text(raw_input)
+            if parsed_amt is not None:
+                project_data["total_amount"] = parsed_amt
+                project_data["action"] = "update"
+                if "rename" not in raw_input.lower():
+                    project_data["new_title"] = None
+
+    # Smart heuristics for pending item updates & renames
+    if intent == "track_pending":
+        old_n, new_n = parse_rename_pattern(raw_input)
+        if old_n and new_n:
+            pending["action"] = "update"
+            pending["title"] = old_n
+            pending["new_title"] = new_n
+        if any(w in raw_input.lower() for w in ["mark done", "mark as done", "mark completed", "completed", "finish"]):
+            pending["action"] = "update"
+            pending["is_completed"] = True
+
+    # Smart heuristics for timeline updates, renames & rescheduling
+    if intent in ["manage_timeline", "update_timeline"]:
+        old_n, new_n = parse_rename_pattern(raw_input)
+        if old_n and new_n:
+            if not timeline:
+                timeline.append({"action": "update", "event_name": old_n, "new_event_name": new_n})
+            else:
+                timeline[-1]["action"] = "update"
+                timeline[-1]["event_name"] = old_n
+                timeline[-1]["new_event_name"] = new_n
+        if any(w in raw_input.lower() for w in ["reschedule", "postpone", "move", "change date", "shift"]):
+            if not timeline:
+                timeline.append({"action": "update"})
+            else:
+                timeline[-1]["action"] = "update"
+            if not timeline[-1].get("event_date"):
+                parsed_d = parse_date_from_text(raw_input, local_dt if 'local_dt' in locals() else datetime.now())
+                if parsed_d:
+                    timeline[-1]["event_date"] = parsed_d
+
+    # Smart heuristics for reminder updates, renames & rescheduling
+    if intent == "manage_reminder":
+        old_n, new_n = parse_rename_pattern(raw_input)
+        if old_n and new_n:
+            reminder["action"] = "update"
+            reminder["title"] = old_n
+            reminder["new_title"] = new_n
+        if any(w in raw_input.lower() for w in ["reschedule", "postpone", "change reminder", "move reminder", "delay", "push back"]):
+            reminder["action"] = "update"
+            if not reminder.get("remind_at"):
+                parsed_d = parse_date_from_text(raw_input, local_dt if 'local_dt' in locals() else datetime.now())
+                if parsed_d:
+                    reminder["remind_at"] = parsed_d
+
+    context_project = state.get("project_title")
+    if context_project:
+        if todos and isinstance(todos, list) and not todos[-1].get("project_title"):
+            todos[-1]["project_title"] = context_project
+        if payment and isinstance(payment, dict) and not payment.get("project_title"):
+            payment["project_title"] = context_project
+        if pending and isinstance(pending, dict) and not pending.get("project_title"):
+            pending["project_title"] = context_project
+        if report and isinstance(report, dict) and not report.get("project_title"):
+            report["project_title"] = context_project
 
     return {
         "project": project_data,

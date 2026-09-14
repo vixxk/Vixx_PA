@@ -42,20 +42,30 @@ async def wrapped_extractor_node(state: WorkflowState) -> Dict[str, Any]:
     intent = state.get("intent")
     extracted_keys = []
     if intent == "create_project" and res.get("project"):
-        extracted_keys = [k for k, v in res["project"].items() if v is not None]
+        p_title = res["project"].get("title") or "new project"
+        extracted_keys = [f"project='{p_title}'"]
     elif intent == "create_task" and res.get("todos"):
-        extracted_keys = [k for k, v in res["todos"][-1].items() if v is not None]
+        last_t = res["todos"][-1]
+        t_title = last_t.get("title") or "task"
+        t_proj = last_t.get("project_title") or "workspace"
+        extracted_keys = [f"title='{t_title}'", f"project='{t_proj}'"]
     elif intent == "track_payment" and res.get("payment"):
-        extracted_keys = [k for k, v in res["payment"].items() if v is not None]
+        pay = res["payment"]
+        proj_name = pay.get("project_title") or "unspecified"
+        amt = pay.get("amount")
+        amt_str = f"{amt:,.0f} INR" if amt else "unspecified"
+        extracted_keys = [f"project='{proj_name}'", f"amount={amt_str}"]
     elif intent == "update_timeline" and res.get("timeline"):
         extracted_keys = [k for k, v in res["timeline"][-1].items() if v is not None]
     elif intent == "set_reminder" and res.get("reminder"):
         extracted_keys = [k for k, v in res["reminder"].items() if v is not None]
     elif intent == "generate_report" and res.get("report"):
         extracted_keys = [k for k, v in res["report"].items() if v is not None]
+    elif intent == "workspace_overview":
+        extracted_keys = ["workspace_briefing"]
         
     extracted_str = ", ".join(extracted_keys) if extracted_keys else "none"
-    steps.append(f"🔍 Extractor → parsed fields: {extracted_str}")
+    steps.append(f"🔍 Extractor → resolved: {extracted_str}")
     res["reasoning_steps"] = steps
     return res
 

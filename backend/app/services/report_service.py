@@ -204,7 +204,7 @@ async def _generate_notepad_report_flow(
     report.generate(formatted_notes)
 
     base_fname = os.path.basename(fname)
-    url = f"http://localhost:8000/uploads/{base_fname}"
+    url = f"http://localhost:5000/uploads/{base_fname}"
     proj_names = ", ".join([p.title for p in projects])
     return (
         f"### 📝 Project Notepad PDF Compiled!\n\n"
@@ -266,7 +266,7 @@ async def _generate_todo_report_flow(
     report.generate(tasks_list)
 
     base_fname = os.path.basename(fname)
-    url = f"http://localhost:8000/uploads/{base_fname}"
+    url = f"http://localhost:5000/uploads/{base_fname}"
     return (
         f"### 📋 To-Do List PDF Generated!\n\n"
         f"Compiled task backlog in full detail:\n"
@@ -344,7 +344,7 @@ async def _generate_payments_report_flow(
     report.generate(payments_list)
 
     base_fname = os.path.basename(fname)
-    url = f"http://localhost:8000/uploads/{base_fname}"
+    url = f"http://localhost:5000/uploads/{base_fname}"
     received_total = sum(p['amount'] for p in payments_list if p['status'] == 'received')
     remaining_display = max(0.0, project_total - received_total) if project_total > 0 else sum(p['amount'] for p in payments_list if p['status'] != 'received')
     

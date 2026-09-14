@@ -41,7 +41,7 @@ export default function IntegrationsView({ sheetLinks = { payments_url: null, to
             </div>
             <div className="skeleton-pulse skeleton-button" style={{ width: '90px', height: '24px', borderRadius: '4px' }} />
           </div>
-          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="flex-between-responsive" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
             <div className="skeleton-pulse skeleton-text" style={{ width: '60%', height: '14px', margin: 0 }} />
             <div className="skeleton-pulse skeleton-button" style={{ width: '150px', height: '36px', borderRadius: '8px' }} />
           </div>
@@ -96,7 +96,7 @@ export default function IntegrationsView({ sheetLinks = { payments_url: null, to
           </div>
         </div>
 
-        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="flex-between-responsive" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
           <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
             {hasGoogleToken 
               ? "Your account is authorized. Real-time changes to your tasks and milestones are automatically synced with Google Calendar."

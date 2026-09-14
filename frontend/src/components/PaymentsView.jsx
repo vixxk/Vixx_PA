@@ -212,7 +212,7 @@ export default function PaymentsView({ projects = [], onRefresh }) {
       </div>
 
       {/* Aggregate Cards */}
-      <div className="stats-bar" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+      <div className="payments-stats-grid stats-bar">
         {loading ? (
           [1, 2].map(i => (
             <div key={i} className="glass-panel stat-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -387,7 +387,7 @@ export default function PaymentsView({ projects = [], onRefresh }) {
             
             {error && <p style={{ color: '#f87171', fontSize: '0.85rem' }}>{error}</p>}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="payments-form-grid">
               <div className="form-group">
                 <label className="form-label">Associated Project</label>
                 <select className="input-field" value={projectId} onChange={(e) => setProjectId(e.target.value)} required>
@@ -408,14 +408,14 @@ export default function PaymentsView({ projects = [], onRefresh }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="payments-form-grid">
               <div className="form-group">
                 <label className="form-label">Amount</label>
                 <input type="number" step="0.01" className="input-field" placeholder="10000" value={amount} onChange={(e) => setAmount(e.target.value)} required />
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="payments-form-grid">
               <div className="form-group">
                 <label className="form-label">Status</label>
                 <select className="input-field" value={status} onChange={(e) => setStatus(e.target.value)}>

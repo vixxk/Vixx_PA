@@ -2,37 +2,41 @@
 
 Vixx PA is a premium, state-of-the-art Personal Assistant and Freelancing Operating System. It is built as a complete monorepo containing a high-performance **FastAPI backend** powered by **LangGraph AI Agents** and **PostgreSQL**, alongside a modern, rich **React + Vite frontend** styled with vanilla CSS glassmorphic components.
 
+> **Docs**: [Backend README](./backend/README.md) | [Frontend README](./frontend/README.md)
+
 ---
 
 ## Key Features
 
 1. **Dashboard & Project Workspaces**: Live analytics, tracking milestone progress, remaining balances, and tasks.
-2. **AI Chat Interface**: Interactive chat with local system context to execute actions like creating projects, adding tasks, and logging payments.
-3. **Payments Ledger**: Dedicated ledger standardizing transactions exclusively in Indian Rupees (₹) with status tracking.
-4. **AI Report Engine**: Generates comprehensive PDF summaries (notepad compilations, task logs, payments ledgers) in custom design styles (teal, navy, charcoal, etc.).
-5. **Reminders & WhatsApp Sync**: Runs a background daemon that sends automated reminders via the Meta WhatsApp Cloud API.
-6. **Third-Party Integrations**: Synchronize tasks and events with Google Calendar, Google Sheets, and GitHub repository updates.
+2. **AI Chat Interface**: Interactive chat with session memory, voice transcription, and natural language commands for creating projects, tasks, payments, and more.
+3. **Payments Ledger**: Dedicated ledger standardizing transactions exclusively in Indian Rupees (₹) with status tracking and revenue charts.
+4. **AI Report Engine**: Generates comprehensive PDF summaries (notepad compilations, task logs, payments ledgers) in 6 custom design themes (navy, teal, emerald, charcoal, ruby, dark).
+5. **Reminders & SMS Notifications**: Background daemon that sends automated reminders via Twilio SMS.
+6. **Third-Party Integrations**: Synchronize tasks and events with Google Calendar, Google Sheets (legacy, disabled), and GitHub repository updates.
 
 ---
 
 ## Tech Stack
 
-- **Frontend**: React, Vite, Lucide React (icons), Recharts (charts).
-- **Backend**: FastAPI, SQLAlchemy (PostgreSQL ORM), LangGraph (Agentic workflows), Uvicorn.
+- **Frontend**: React 19, Vite 8, Lucide React (icons), vanilla CSS (glassmorphism design system).
+- **Backend**: FastAPI, SQLAlchemy 2.0 (async), LangGraph (agentic workflows), Uvicorn.
 - **Database**: PostgreSQL (via `asyncpg`).
-- **AI**: Groq API (`llama-3.3-70b-versatile`).
+- **AI**: Groq API (`llama-3.3-70b-versatile`), Groq Whisper (audio transcription).
+- **PDF Generation**: ReportLab with 6 theme templates.
+- **SMS**: Twilio.
 
 ---
 
 ## Directory Structure
 
 ```
-├── backend/          # FastAPI application, database schemas, and AI agents
+├── backend/          # FastAPI application, AI agents, database schemas
 ├── frontend/         # React + Vite interface and API services
 ├── uploads/          # Local storage for documents, contracts, and generated reports
 ├── run.sh            # Root starter script to spin up services concurrently
 ├── .gitignore        # Root gitignore rules
-└── README.md         # Documentation
+└── README.md         # This file
 ```
 
 ---
@@ -47,57 +51,56 @@ Vixx PA is a premium, state-of-the-art Personal Assistant and Freelancing Operat
 
 ### 1. Configure Environment Variables
 
-#### Backend configuration
-Go to `backend/`, copy the template, and fill in your keys:
+#### Backend
 ```bash
 cd backend
 cp .env.example .env
+# Edit .env with your keys
 ```
+
 Key variables:
 - `DATABASE_URL`: PostgreSQL connection string (e.g. `postgresql+asyncpg://vixx:password@localhost:5432/work_os`)
 - `GROQ_API_KEY`: Groq Cloud API Key
-- `META_WHATSAPP_ACCESS_TOKEN` / `PHONE_NUMBER_ID`: WhatsApp API credentials
+- `JWT_SECRET_KEY`: Secret for JWT signing
+- `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`: Twilio credentials for SMS reminders
 
-#### Frontend configuration (Optional)
-If you want to run the API on a non-standard port or hostname:
-Create a `.env` file in the `frontend` directory:
-```env
-VITE_API_BASE_URL=http://localhost:8000/api/v1
+#### Frontend (Optional)
+```bash
+cd frontend
+cp .env.example .env
+# Default: VITE_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
 ### 2. Install Dependencies
 
-#### Backend Setup
 ```bash
+# Backend
 cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
 
-#### Frontend Setup
-```bash
-cd frontend
+# Frontend
+cd ../frontend
 npm install
 ```
 
 ### 3. Run the Services
 
-Use the root launcher script to start both the FastAPI backend and Vite frontend concurrently:
 ```bash
 # From root directory
 chmod +x run.sh
 ./run.sh
 ```
 
-- **Frontend App**: `http://localhost:5173`
-- **FastAPI API Swagger Docs**: `http://localhost:8000/docs`
+- **Frontend App**: http://localhost:5173
+- **API Swagger Docs**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/health
 
 ---
 
 ## Version Control and Commit Best Practices
 
-Before pushing code, make sure:
-- Local configurations and credentials in `.env` are not tracked (root and child `.gitignore` rules prevent this).
-- Secrets are replaced with placeholders or configured via environmental variables.
-- Code matches linting rules and passes initial smoke tests.
+- `.env` files are gitignored — never commit credentials.
+- Replace secrets with placeholders or configure via environment variables.
+- Run `npm run lint` in `frontend/` before pushing.

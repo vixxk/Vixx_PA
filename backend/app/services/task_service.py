@@ -29,26 +29,52 @@ async def list_tasks(db, user_id, project_title=None, raw_input="", session_data
     projects, proj_ids = await _get_user_projects_and_ids(db, user_id)
     if not proj_ids:
         return "No projects found. Please create a project first."
-    target_project = await resolve_project_from_context(db, user_id, raw_input, extracted_title=project_title, session_data=session_data) if project_title or session_data else None
+    
+    target_project = await resolve_project_from_context(db, user_id, raw_input, extracted_title=project_title, session_data=session_data) if (project_title or session_data) else None
+    
     if target_project:
         q = select(Todo).filter(Todo.project_id == target_project.id)
     else:
         q = select(Todo).filter(Todo.project_id.in_(proj_ids))
-    if not include_completed:
+
+    lower_input = raw_input.lower()
+    wants_completed_only = any(w in lower_input for w in ["completed", "finished", "closed", "done"]) and not any(w in lower_input for w in ["not completed", "not done", "pending", "active"])
+    wants_all = any(w in lower_input for w in ["all tasks", "all todos", "every task", "everything", "all my tasks"])
+    wants_high_prio = any(w in lower_input for w in ["high priority", "urgent", "critical", "highest priority", "p1"])
+
+    if wants_completed_only:
+        q = q.filter(Todo.status == "done")
+        header_title = "Completed Tasks"
+    elif wants_all or include_completed:
+        header_title = "All Tasks"
+    else:
         q = q.filter(Todo.status != "done")
+        header_title = "Pending Tasks"
+
+    if wants_high_prio:
+        q = q.filter(Todo.priority.in_(["high", "critical"]))
+        header_title = f"High Priority {header_title}"
+
+    # Order by due date asc (nulls last)
+    q = q.order_by(Todo.due_date.asc().nullslast(), Todo.created_at.desc())
     todo_objs = (await db.execute(q)).scalars().all()
+
+    scope_str = f" in {target_project.title}" if target_project else ""
     if not todo_objs:
-        return f"No pending tasks found{' for project ' + repr(target_project.title) if target_project else ''}."
-    header = f"### 📋 Pending Tasks in {target_project.title}:\n\n" if target_project else "### 📋 Pending Tasks:\n\n"
-    # Build project id->title map
+        return f"No {header_title.lower()} found{scope_str}."
+
+    header = f"### 📋 {header_title}{scope_str} ({len(todo_objs)}):\n\n"
     proj_map = {p.id: p.title for p in projects}
     msg = header
     for t in todo_objs:
-        due_str = t.due_date.strftime("%Y-%m-%d") if t.due_date else "N/A"
-        prio_emoji = "🔴" if t.priority in ["high", "critical"] else "🟡" if t.priority == "medium" else "🟢" if t.priority == "low" else "⚪"
-        prio_label = t.priority.upper() if t.priority else "N/A"
-        proj_name = proj_map.get(t.project_id, "Unknown")
-        msg += f"- {prio_emoji} **{t.title}** (Project: {proj_name}, Priority: {prio_label}, Due: {due_str}) - *{t.description or 'No description'}*\n"
+        due_str = t.due_date.strftime("%Y-%m-%d") if t.due_date else "No deadline"
+        status_symbol = "✅" if t.status == "done" else "🔴" if t.priority in ["high", "critical"] else "🟡" if t.priority == "medium" else "🟢" if t.priority == "low" else "⚪"
+        prio_label = (t.priority or "NORMAL").upper()
+        status_label = "DONE" if t.status == "done" else "PENDING"
+        proj_name = proj_map.get(t.project_id, "General")
+        msg += f"- {status_symbol} **{t.title}** (Project: {proj_name}, Priority: {prio_label}, Status: {status_label}, Due: {due_str})\n"
+        if t.description:
+            msg += f"  *{t.description}*\n"
     return msg
 
 
@@ -87,16 +113,42 @@ async def update_task(db, user_id, todo_data, raw_input=""):
     if not task_title: return "Please specify which task to update."
     todo_obj = await resolve_task(db, proj_ids, task_title)
     if not todo_obj: return f"Task '{task_title}' not found."
-    if todo_data.get("status"): todo_obj.status = todo_data["status"]
-    if todo_data.get("priority"): todo_obj.priority = todo_data["priority"]
-    if todo_data.get("description"): todo_obj.description = todo_data["description"]
+
+    changes = []
+    if todo_data.get("new_title"):
+        old_title = todo_obj.title
+        todo_obj.title = todo_data["new_title"]
+        changes.append(f"title from '{old_title}' to '{todo_obj.title}'")
+    if todo_data.get("status"):
+        todo_obj.status = todo_data["status"]
+        changes.append(f"status to '{todo_obj.status}'")
+    if todo_data.get("priority"):
+        todo_obj.priority = todo_data["priority"]
+        changes.append(f"priority to '{todo_obj.priority}'")
+    if todo_data.get("description") is not None:
+        todo_obj.description = todo_data["description"]
+        changes.append("description")
     if todo_data.get("due_date"):
-        try: todo_obj.due_date = dateutil.parser.parse(todo_data["due_date"])
+        try:
+            todo_obj.due_date = dateutil.parser.parse(str(todo_data["due_date"]))
+            changes.append(f"due date to {todo_obj.due_date.strftime('%b %d, %Y')}")
         except: pass
+    if todo_data.get("estimated_hours") is not None:
+        todo_obj.estimated_hours = todo_data["estimated_hours"]
+        changes.append(f"estimated hours to {todo_obj.estimated_hours}")
+    if todo_data.get("new_project_title"):
+        new_proj = await resolve_project_from_context(db, user_id, raw_input, extracted_title=todo_data["new_project_title"])
+        if new_proj and new_proj.id != todo_obj.project_id:
+            todo_obj.project_id = new_proj.id
+            changes.append(f"moved to project '{new_proj.title}'")
+
     await db.commit()
     invalidate_analytics_cache(user_id)
     await db.refresh(todo_obj)
-    return f"Successfully updated task '{todo_obj.title}' status to '{todo_obj.status}'."
+
+    if changes:
+        return f"Successfully updated task '{todo_obj.title}': {', '.join(changes)}."
+    return f"Task '{todo_obj.title}' is already up to date."
 
 
 async def delete_tasks(db, user_id, task_title=None, confirmed=False):
@@ -152,7 +204,7 @@ async def generate_tasks_pdf(db, user_id, raw_input="", project_title=None, sess
     fname = f"uploads/tasks_report_{uid}.pdf"
     os.makedirs("uploads", exist_ok=True)
     generate_todos_report_pdf(data_list, fname, {"title": title_val, "subtitle": f"Total tasks: {len(data_list)}", "theme": theme})
-    url = f"http://localhost:8000/{fname}"
+    url = f"http://localhost:5000/{fname}"
     tbl = "\n### 📋 Tasks Details:\n\n| Task | Project | Priority | Status | Due |\n| :--- | :--- | :--- | :--- | :--- |\n"
     for i in data_list:
         p = str(i["priority"]).upper()
