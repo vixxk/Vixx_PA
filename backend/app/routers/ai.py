@@ -203,6 +203,41 @@ async def process_ai_command(
                 "reasoning_steps": ["⚡ Deterministic Engine → bypassed LLM to guarantee report delivery."]
             }, summary=summary_msg, session_id=str(session_id))
 
+        # Pre-fetch all workspace projects to give the agent full context awareness
+        workspace_projects = []
+        try:
+            from app.models.project import Project
+            from sqlalchemy import select
+            p_res = await db.execute(select(Project).filter(Project.user_id == user_id))
+            p_rows = p_res.scalars().all()
+            workspace_projects = [
+                {
+                    "id": str(p.id),
+                    "title": p.title,
+                    "status": p.status,
+                    "total_amount": float(p.total_amount or 0.0),
+                    "description": p.description
+                }
+                for p in p_rows
+            ]
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Could not load workspace_projects: {e}")
+
+        # ── Resolve project context from frontend dropdown if provided ──
+        context_project_title = request.project_title
+        if request.project_id and not context_project_title and request.project_id != "all":
+            try:
+                for wp in workspace_projects:
+                    if wp["id"] == request.project_id:
+                        context_project_title = wp["title"]
+                        break
+            except Exception:
+                pass
+
+        if context_project_title:
+            session_data["project_title"] = context_project_title
+
         # ── Build initial state for LangGraph ──
         prev_state = session_data.get("pending_state")
         if not prev_state:
@@ -229,6 +264,9 @@ async def process_ai_command(
             "approved": False,
             "history": history,
             "last_project": session_data.get("last_project"),
+            "project_id": request.project_id if request.project_id != "all" else None,
+            "project_title": context_project_title,
+            "workspace_projects": workspace_projects,
             "google_token": request.google_token,
             "reasoning_steps": [],
             "local_time": request.local_time,
@@ -279,6 +317,8 @@ async def process_ai_command(
             summary_msg = await _handle_pending(db, user_id, final_state, session_data, raw_input)
         elif intent == "generate_report":
             summary_msg = await _handle_report(db, user_id, final_state, session_data, raw_input)
+        elif intent in ["workspace_overview", "generate_summary", "analytics"]:
+            summary_msg = await _handle_workspace_overview(db, user_id, session_data, raw_input)
     except HTTPException:
         raise
     except Exception as e:
@@ -567,6 +607,9 @@ async def _handle_timeline(db, user_id, final_state, initial_state, session_data
             return result["message"]
         return result["message"]
 
+    elif action == "update":
+        return await timeline_service.update_timeline_event(db, user_id, event_data, raw_input)
+
     else:  # create
         google_token = request.google_token or session_data.get("google_token")
         return await timeline_service.create_timeline_event(db, user_id, event_data, raw_input, session_data, google_token)
@@ -582,6 +625,8 @@ async def _handle_reminder(db, user_id, final_state, session_data, request):
         return await reminder_service.cancel_reminder(db, user_id, reminder_data.get("title"))
     elif action == "clear":
         return await reminder_service.clear_all_reminders(db, user_id)
+    elif action == "update":
+        return await reminder_service.update_reminder(db, user_id, reminder_data, request.timezone_offset)
     else:  # create
         result = await reminder_service.create_reminder(db, user_id, reminder_data, request.timezone_offset)
         if result.get("needs_clarification"):
@@ -608,8 +653,10 @@ async def _handle_pending(db, user_id, final_state, session_data, raw_input):
             session_data["pending_state"] = final_state
             return result["message"]
         return result["message"] if isinstance(result, dict) else result
-    elif action in ["update", "complete"]:
+    elif action == "complete":
         return await pending_service.complete_pending(db, user_id, pending_data)
+    elif action == "update":
+        return await pending_service.update_pending(db, user_id, pending_data, raw_input)
     else:  # create
         result = await pending_service.create_pending(db, user_id, pending_data, raw_input, session_data)
         if isinstance(result, dict) and result.get("needs_clarification"):
@@ -623,6 +670,102 @@ async def _handle_pending(db, user_id, final_state, session_data, raw_input):
 async def _handle_report(db, user_id, final_state, session_data, raw_input):
     report_data = final_state.get("report") or {}
     return await report_service.generate_report(db, user_id, report_data, raw_input, session_data)
+
+
+async def _handle_workspace_overview(db: AsyncSession, user_id: UUID, session_data: dict = None, raw_input: str = "") -> str:
+    """
+    Generates a multi-domain Executive Briefing of projects, urgent tasks,
+    financial health, pending client deliverables, and upcoming alerts.
+    """
+    from app.models.project import Project
+    from app.models.todo import Todo
+    from app.models.payment import Payment
+    from app.models.reminder import Reminder
+    from app.models.pending_thing import PendingThing
+    from sqlalchemy import select, desc
+
+    # 1. Projects
+    p_stmt = select(Project).filter(Project.user_id == user_id).order_by(desc(Project.created_at))
+    projects = (await db.execute(p_stmt)).scalars().all()
+
+    active_projects = [p for p in projects if p.status not in ["finished", "completed"]]
+    finished_projects = [p for p in projects if p.status in ["finished", "completed"]]
+    total_budget = sum(float(p.total_amount or 0) for p in projects)
+
+    # 2. Tasks
+    proj_ids = [p.id for p in projects]
+    if proj_ids:
+        t_stmt = select(Todo).filter(Todo.project_id.in_(proj_ids)).order_by(Todo.due_date.asc().nullslast(), desc(Todo.created_at))
+        todos = (await db.execute(t_stmt)).scalars().all()
+    else:
+        todos = []
+
+    pending_todos = [t for t in todos if t.status != "done"]
+    high_prio_todos = [t for t in pending_todos if t.priority in ["high", "critical"]]
+
+    # 3. Payments
+    if proj_ids:
+        pay_stmt = select(Payment).filter(Payment.project_id.in_(proj_ids))
+        payments = (await db.execute(pay_stmt)).scalars().all()
+    else:
+        payments = []
+
+    total_received = sum(float(p.amount) for p in payments if p.status == "received")
+    pending_revenue = max(0.0, total_budget - total_received)
+
+    # 4. Reminders
+    rem_stmt = select(Reminder).filter(Reminder.user_id == user_id, Reminder.status == "scheduled").order_by(Reminder.remind_at.asc()).limit(3)
+    reminders = (await db.execute(rem_stmt)).scalars().all()
+
+    # 5. Pending deliverables
+    pend_stmt = select(PendingThing).filter(PendingThing.user_id == user_id, PendingThing.is_completed == False).limit(3)
+    pending_things = (await db.execute(pend_stmt)).scalars().all()
+
+    # Build Executive Briefing Markdown
+    proj_map = {p.id: p.title for p in projects}
+
+    msg = "### ⚡ Vixx Executive Workspace Briefing\n\n"
+
+    msg += "**💼 Workspace Projects:**\n"
+    if projects:
+        msg += f"- **Active:** {len(active_projects)} | **Completed:** {len(finished_projects)} | **Pipeline Value:** ₹{total_budget:,.0f}\n"
+        active_titles = ", ".join(f"*{p.title}*" for p in active_projects[:4])
+        if active_titles:
+            msg += f"- **Focus Workspaces:** {active_titles}\n"
+    else:
+        msg += "- No projects created yet. Say *'Create project [name]'* to start.\n"
+
+    msg += "\n**📋 Priority Action Items:**\n"
+    if high_prio_todos:
+        for t in high_prio_todos[:4]:
+            p_name = proj_map.get(t.project_id, "General")
+            due_str = f", Due: {t.due_date.strftime('%b %d')}" if t.due_date else ""
+            msg += f"- 🔴 **{t.title}** *(Project: {p_name}{due_str})*\n"
+    elif pending_todos:
+        for t in pending_todos[:3]:
+            p_name = proj_map.get(t.project_id, "General")
+            due_str = f", Due: {t.due_date.strftime('%b %d')}" if t.due_date else ""
+            msg += f"- 🟡 **{t.title}** *(Project: {p_name}{due_str})*\n"
+    else:
+        msg += "- 🎉 All sprint tasks are completed!\n"
+
+    msg += "\n**💳 Financial Snapshot:**\n"
+    msg += f"- **Total Received:** ₹{total_received:,.0f} | **Remaining Outstanding:** ₹{pending_revenue:,.0f}\n"
+
+    if reminders:
+        msg += "\n**⏰ Upcoming Alerts:**\n"
+        for r in reminders:
+            time_str = r.remind_at.strftime("%b %d, %I:%M %p") if r.remind_at else "Upcoming"
+            channel_label = r.channel.upper() if r.channel else "SMS"
+            msg += f"- 🔔 **{r.title}** ({time_str} via {channel_label})\n"
+
+    if pending_things:
+        msg += "\n**⏳ Client Deliverables Awaiting:**\n"
+        for pt in pending_things:
+            p_name = proj_map.get(pt.project_id, "General") if pt.project_id else "General"
+            msg += f"- 📦 **{pt.title}** *(Project: {p_name})*\n"
+
+    return msg
 
 
 # ══════════════════════════════════════════════════════════════
@@ -715,6 +858,28 @@ async def _filter_and_format_response(
     Feedback and filtering layer: passes the raw database/domain output through the LLM 
     to filter and format it according to the user's instructions and constraints.
     """
+    if not system_response:
+        return "Action processed."
+
+    # Fast bypass: if domain response is already structured markdown and no strict formatting was asked
+    raw_lower = raw_input.lower().strip()
+    explicit_formatting_cues = ["only", "just the", "one word", "in json", "short form", "format as", "in table", "summarize in", "briefly", "single word", "bullet points only"]
+    has_explicit_formatting = any(cue in raw_lower for cue in explicit_formatting_cues)
+
+    if not has_explicit_formatting and (
+        system_response.startswith("###") or
+        system_response.startswith("#") or
+        system_response.startswith("⚡") or
+        system_response.startswith("Successfully") or
+        system_response.startswith("Action cancelled") or
+        system_response.startswith("No projects found") or
+        system_response.startswith("No pending tasks found") or
+        system_response.startswith("No payment records found") or
+        "### 📋" in system_response or
+        "### 💳" in system_response
+    ):
+        return system_response
+
     try:
         from app.utils.llm import get_llm
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage

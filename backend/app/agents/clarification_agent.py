@@ -86,15 +86,23 @@ async def run_clarification_agent(state: WorkflowState) -> Dict[str, Any]:
         if is_list_query(raw_query) or action in ["read", "list", "query", "enquire", "delete", "clear", "empty", "generate_pdf", "sync"]:
             pass
         else:
-            has_project_title = payment.get("project_title") or (
+            workspace_projects = state.get("workspace_projects") or []
+            known_projects = [p["title"] for p in workspace_projects if p.get("title")]
+
+            has_project_title = bool(payment.get("project_title")) or (
                 "payments" in payment 
                 and isinstance(payment["payments"], list) 
                 and any(p.get("project_title") for p in payment["payments"] if isinstance(p, dict))
             )
+            # Auto-infer if user only has 1 project in their workspace
+            if not has_project_title and len(workspace_projects) == 1:
+                has_project_title = True
+                payment["project_title"] = workspace_projects[0]["title"]
+
             if not has_project_title:
-                missing_fields.append("project_title")
+                missing_fields.append("project")
                 
-            has_amount = payment.get("amount") or (
+            has_amount = bool(payment.get("amount")) or (
                 "payments" in payment 
                 and isinstance(payment["payments"], list) 
                 and any(p.get("amount") for p in payment["payments"] if isinstance(p, dict))
@@ -104,8 +112,15 @@ async def run_clarification_agent(state: WorkflowState) -> Dict[str, Any]:
                 
             if missing_fields:
                 needs_clarification = True
-                fields_str = " and ".join(missing_fields)
-                clarification_message = f"Please specify the {fields_str} for the payment."
+                if "project" in missing_fields and "amount" in missing_fields:
+                    proj_hint = f" (Existing projects: {', '.join(known_projects)})" if known_projects else ""
+                    clarification_message = f"Could you please specify the amount and which project this payment is for?{proj_hint}"
+                elif "project" in missing_fields:
+                    proj_hint = f" (Existing projects: {', '.join(known_projects)})" if known_projects else ""
+                    clarification_message = f"Which project should I log this payment for?{proj_hint}"
+                else:
+                    proj_name = payment.get('project_title') or 'this project'
+                    clarification_message = f"Please specify the payment amount for {proj_name}."
     
     elif intent == "set_reminder":
         reminder = state.get("reminder") or {}
@@ -143,87 +158,68 @@ async def run_clarification_agent(state: WorkflowState) -> Dict[str, Any]:
 
     elif intent == "clarify":
         needs_clarification = True
-        try:
-            from app.utils.llm import get_llm
-            from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-            
-            llm = get_llm()
-            user_query = state.get("raw_input", "").strip()
-            
-            # 1. Fast keyword check for greetings and capability questions
-            lower_query = user_query.lower()
-            greetings = ["hi", "hello", "hey", "hola", "greetings", "good morning", "good afternoon", "good evening"]
-            self_questions = ["who are you", "what can you do", "what is vixx", "help me", "help", "who is vixx", "what are your features", "what do you do"]
-            
-            is_simple_greeting = any(lower_query == g or lower_query.startswith(g + " ") for g in greetings)
-            is_self_query = any(sq in lower_query for sq in self_questions)
-            
-            # 2. LLM classification check for general knowledge/external queries
-            is_workspace_or_self = True
-            if not is_simple_greeting and not is_self_query:
-                classification_prompt = (
-                    "Determine if the following user query is related to managing a workspace (projects, tasks, schedules, invoicing/payments, clients, files, reminders) "
-                    "or is a conversation/capability query about the assistant itself (Vixx).\n\n"
-                    "If the query asks about general knowledge, external entities, science, trivia, math, coding, politics, "
-                    "or public figures (e.g., 'why is the sky blue', 'who is the president', 'what is 4+4', 'who is vivek', 'write a function'): respond with NO.\n"
-                    "Otherwise, respond with YES.\n\n"
-                    f"Query: \"{user_query}\"\n"
-                    "Response (YES or NO):"
-                )
-                class_res = await llm.ainvoke([HumanMessage(content=classification_prompt)])
-                class_text = class_res.content.strip().upper()
-                if "NO" in class_text:
-                    is_workspace_or_self = False
-            
-            # 3. Direct response or workspace context generation
-            if not is_workspace_or_self:
-                clarification_message = (
-                    "I am a dedicated workspace assistant. I can only assist you with information and actions "
-                    "related to your projects, tasks, schedules, invoices, reminders, and files. Please ask me about "
-                    "your workspace data or capabilities."
-                )
-            else:
+        user_query = state.get("raw_input", "").strip()
+        lower_query = user_query.lower()
+        greetings = ["hi", "hello", "hey", "hola", "greetings", "good morning", "good afternoon", "good evening"]
+        
+        # Fast response for simple greetings without waiting on LLM
+        if any(lower_query == g or lower_query == g + "!" or lower_query.startswith(g + " ") for g in greetings) and len(user_query.split()) <= 4:
+            clarification_message = (
+                "Hello! I am Vixx, your personal workspace AI assistant. "
+                "I can help you manage projects, prioritize tasks, track invoices and payments, "
+                "schedule reminders, and generate executive PDF reports. What would you like to work on?"
+            )
+        else:
+            try:
+                from app.utils.llm import get_llm
+                from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+                llm = get_llm()
+
                 last_project = state.get("last_project")
+                context_proj_title = state.get("project_title")
                 last_project_context = ""
-                if last_project:
+                if context_proj_title:
+                    last_project_context = f"\nActive Project Context: '{context_proj_title}'\n"
+                elif last_project:
                     last_project_context = (
-                        f"\nContext - Recently Created/Modified Project:\n"
+                        f"\nRecent Project Context:\n"
                         f"- Title: {last_project.get('title')}\n"
                         f"- Description: {last_project.get('description') or 'No description'}\n"
-                        f"- Summary: {last_project.get('summary') or 'No summary yet'}\n"
                     )
-                
+
                 system_prompt = (
-                    "You are Vixx, a premium personal workspace assistant. You only work on information available in the user's database or related to their workspace/capabilities.\n\n"
-                    "CRITICAL MANDATE:\n"
-                    "1. If the user greets you (e.g. 'hello', 'hi') or asks about your capabilities (e.g. 'who are you', 'what can you do'), briefly and warmly introduce yourself as Vixx, their personal workspace assistant, and explain that you help manage their tasks, projects, schedules, invoices, and reminders.\n"
-                    "2. If the user asks ANY question about external topics, general knowledge, trivia, public figures, math, coding, or anything not stored in their database or related to their workspace features (e.g., 'who is the president of India', 'what is 4+4', 'who is vivek', etc.):\n"
-                    "   You MUST immediately refuse to answer. You MUST reply exactly with:\n"
+                    "You are Vixx, a premium personal workspace assistant for managing projects, tasks, schedules, invoices/payments, files, and reminders.\n"
+                    f"{last_project_context}\n"
+                    "CRITICAL RULES:\n"
+                    "1. If the user greets you or asks what you can do, warmly introduce yourself as Vixx and summarize key capabilities in clean bullet points.\n"
+                    "2. If the user asks about external topics, general knowledge, trivia, public figures, math, coding, politics, or unrelated topics (e.g., 'who is the president', 'what is 4+4', 'write a function'):\n"
+                    "   You MUST immediately refuse to answer with:\n"
                     "   \"I am a dedicated workspace assistant. I can only assist you with information and actions related to your projects, tasks, schedules, invoices, reminders, and files. Please ask me about your workspace data or capabilities.\"\n"
-                    "   Do NOT cater to the query, do NOT explain, do NOT suggest checking other sites, and do NOT add any other conversational text."
+                    "3. If the user asks how to perform an action or needs guidance, give crisp, actionable step-by-step instructions.\n"
+                    "4. Keep your response concise, polite, and styled in clean Markdown."
                 )
-                
+
                 messages = [SystemMessage(content=system_prompt)]
-                
-                # Append history to LLM messages
+
                 history = state.get("history") or []
                 for msg in history[-6:]:
                     if msg.get("role") == "user":
                         messages.append(HumanMessage(content=msg.get("content")))
                     else:
                         messages.append(AIMessage(content=msg.get("content")))
-                
-                # Add current raw input
+
                 if not history or history[-1].get("content") != state.get("raw_input"):
-                    messages.append(HumanMessage(content=state.get("raw_input", "")))
-                
-                res = await llm.ainvoke(messages)
+                    messages.append(HumanMessage(content=user_query))
+
+                from app.utils.llm import invoke_llm_with_fallback
+                res = await invoke_llm_with_fallback(messages)
                 clarification_message = res.content.strip()
-        except Exception:
-            clarification_message = (
-                "I am a dedicated workspace assistant. I can only assist you with information and actions "
-                "related to your projects, tasks, schedules, invoices, reminders, and files."
-            )
+            except Exception:
+                clarification_message = (
+                    "I am a dedicated workspace assistant. I can help you with your projects, tasks, "
+                    "schedules, invoices, reminders, and files. How can I assist you today?"
+                )
             
     return {
         "needs_clarification": needs_clarification,
