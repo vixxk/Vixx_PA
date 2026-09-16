@@ -137,6 +137,52 @@ async def run_clarification_agent(state: WorkflowState) -> Dict[str, Any]:
                 needs_clarification = True
                 fields_str = " and ".join(missing_fields)
                 clarification_message = f"Please specify the {fields_str} for the reminder."
+
+    elif intent == "send_whatsapp":
+        whatsapp = state.get("whatsapp") or {}
+        action = whatsapp.get("action") or "send"
+        if action == "list":
+            pass
+        elif action == "cancel":
+            if not whatsapp.get("recipient") and not whatsapp.get("message"):
+                needs_clarification = True
+                clarification_message = "Which scheduled WhatsApp message would you like to cancel?"
+        else:  # send or schedule
+            from app.config import settings
+            default_num = settings.DEFAULT_WHATSAPP_NUMBER or settings.USER_SMS_NUMBER
+            if not whatsapp.get("recipient") and not default_num:
+                missing_fields.append("recipient phone number")
+            if not whatsapp.get("message"):
+                missing_fields.append("message text")
+            if action == "schedule" and not whatsapp.get("scheduled_at"):
+                missing_fields.append("scheduled time")
+
+            if missing_fields:
+                needs_clarification = True
+                fields_str = " and ".join(missing_fields)
+                clarification_message = f"Please provide the {fields_str} for the WhatsApp message."
+
+    elif intent == "send_email":
+        email_data = state.get("email") or {}
+        action = email_data.get("action") or "send"
+        if action == "list":
+            pass
+        elif action == "cancel":
+            if not email_data.get("recipient") and not email_data.get("message") and not email_data.get("subject"):
+                needs_clarification = True
+                clarification_message = "Which scheduled email would you like to cancel?"
+        else:  # send or schedule
+            if not email_data.get("recipient"):
+                missing_fields.append("recipient (contact name or email address)")
+            if not email_data.get("message"):
+                missing_fields.append("message instructions")
+            if action == "schedule" and not email_data.get("scheduled_at"):
+                missing_fields.append("scheduled time")
+
+            if missing_fields:
+                needs_clarification = True
+                fields_str = " and ".join(missing_fields)
+                clarification_message = f"Please specify the {fields_str} for the email."
             
     elif intent == "generate_report" or intent == "analytics":
         # Reports and analytics don't need clarification — report_service / analytics_service handle auto-detection

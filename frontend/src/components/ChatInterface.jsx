@@ -27,7 +27,8 @@ import {
   Volume2,
   Menu,
   RotateCcw,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 import { api, getFileUrl } from '../services/api';
 
@@ -149,6 +150,7 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
+  const autoExecuteVoiceRef = useRef(true);
 
   // Sync to localStorage
   useEffect(() => {
@@ -480,16 +482,22 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         stream.getTracks().forEach(track => track.stop());
         setLoading(true);
-        if (window.showToast) window.showToast('AI Transcribing...', 'info');
+        if (window.showToast) window.showToast('AI Transcribing Voice Memo...', 'info');
         
         try {
           const res = await api.ai.transcribe(audioBlob);
-          if (res && res.text) {
-            setInput(res.text);
+          if (res && res.text && res.text.trim()) {
+            const transcribedText = res.text.trim();
             setVoiceModeActive(false);
-            if (window.showToast) window.showToast('Voice transcribed!', 'success');
+            if (autoExecuteVoiceRef.current) {
+              if (window.showToast) window.showToast('Voice memo recognized! Executing action...', 'success');
+              await sendMessage(transcribedText);
+            } else {
+              setInput(transcribedText);
+              if (window.showToast) window.showToast('Voice transcribed to input box!', 'success');
+            }
           } else {
-            if (window.showToast) window.showToast('Speech not clear.', 'error');
+            if (window.showToast) window.showToast('No speech detected in audio memo.', 'error');
           }
         } catch (err) {
           if (window.showToast) window.showToast(err.message, 'error');
@@ -507,7 +515,8 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
     }
   };
 
-  const stopVoiceRecording = () => {
+  const stopVoiceRecording = (autoExecute = true) => {
+    autoExecuteVoiceRef.current = autoExecute;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
@@ -1113,17 +1122,22 @@ export default function ChatInterface({ projects = [], todos = [], payments = []
               {isRecording ? `Listening... ${recordingDuration}s` : 'Processing transcription...'}
             </span>
             
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
               {isRecording ? (
-                <button className="btn" onClick={stopVoiceRecording} style={{ background: '#ef4444', color: '#fff' }}>
-                  <Square size={14} /> Stop & Transcribe
-                </button>
+                <>
+                  <button className="btn btn-primary" onClick={() => stopVoiceRecording(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Zap size={14} /> Send Voice Action
+                  </button>
+                  <button className="btn" onClick={() => stopVoiceRecording(false)} style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Square size={14} /> Transcribe Only
+                  </button>
+                </>
               ) : (
                 <button className="btn btn-primary" onClick={startVoiceRecording}>
                   <Mic size={14} /> Start Speak
                 </button>
               )}
-              <button className="btn btn-secondary" onClick={() => setVoiceModeActive(false)}>
+              <button className="btn btn-secondary" onClick={() => { stopVoiceRecording(false); setVoiceModeActive(false); }}>
                 Cancel
               </button>
             </div>

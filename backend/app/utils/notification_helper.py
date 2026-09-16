@@ -94,6 +94,12 @@ async def send_email(to: str, subject: str, body: str) -> dict:
         return {"success": True, "mode": "local_log"}
 
 
+async def send_whatsapp(to: str, body: str) -> dict:
+    """Send a WhatsApp notification via Green API."""
+    from app.utils.green_api_helper import send_whatsapp_message
+    return await send_whatsapp_message(to, body)
+
+
 def _log_notification(channel: str, recipient: str, message: str):
     log_dir = "notification_logs"
     os.makedirs(log_dir, exist_ok=True)

@@ -59,6 +59,8 @@ async def wrapped_extractor_node(state: WorkflowState) -> Dict[str, Any]:
         extracted_keys = [k for k, v in res["timeline"][-1].items() if v is not None]
     elif intent == "set_reminder" and res.get("reminder"):
         extracted_keys = [k for k, v in res["reminder"].items() if v is not None]
+    elif intent == "send_whatsapp" and res.get("whatsapp"):
+        extracted_keys = [f"{k}='{v}'" for k, v in res["whatsapp"].items() if v is not None and k in ["recipient", "action", "message"]]
     elif intent == "generate_report" and res.get("report"):
         extracted_keys = [k for k, v in res["report"].items() if v is not None]
     elif intent == "workspace_overview":
@@ -73,6 +75,14 @@ async def wrapped_clarifier_node(state: WorkflowState) -> Dict[str, Any]:
     if state.get("confirmed_deletion"):
         steps = list(state.get("reasoning_steps") or [])
         steps.append("✅ Deletion confirmed → proceeding to execute.")
+        return {
+            "needs_clarification": False,
+            "clarification_message": None,
+            "reasoning_steps": steps
+        }
+    if state.get("confirmed_message"):
+        steps = list(state.get("reasoning_steps") or [])
+        steps.append("✅ WhatsApp message confirmed by user → proceeding to send/schedule.")
         return {
             "needs_clarification": False,
             "clarification_message": None,

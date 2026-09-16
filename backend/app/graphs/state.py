@@ -17,6 +17,9 @@ class WorkflowState(TypedDict):
     risks: List[Dict[str, Any]]
     payment: Optional[Dict[str, Any]]
     reminder: Optional[Dict[str, Any]]
+    whatsapp: Optional[Dict[str, Any]]  # for send_whatsapp intent
+    email: Optional[Dict[str, Any]]  # for send_email intent
+    contact: Optional[Dict[str, Any]]  # for manage_contact intent
     pending: Optional[Dict[str, Any]]
     report: Optional[Dict[str, Any]]  # NEW: for generate_report intent
     client: Optional[Dict[str, Any]]  # NEW: for manage_client intent
@@ -31,6 +34,8 @@ class WorkflowState(TypedDict):
     # Validation / Approval status
     approved: bool
     confirmed_deletion: Optional[bool]
+    confirmed_message: Optional[bool]
+    confirmed_email: Optional[bool]
     
     # Context Preservation
     history: Optional[List[Dict[str, str]]]

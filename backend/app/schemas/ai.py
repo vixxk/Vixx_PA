@@ -37,5 +37,6 @@ class AIProcessResponse(BaseModel):
     summary: Optional[str] = None
     reasoning_steps: List[str] = []
     session_id: Optional[str] = None
+    transcription: Optional[str] = None
 
 

@@ -8,7 +8,7 @@ Phase 3: Now uses memory_service for persistent conversations instead of
 volatile in-memory session_store.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any, Optional
 from uuid import UUID
@@ -29,21 +29,14 @@ from app.services import memory_service
 router = APIRouter(prefix="/ai", tags=["AI Orchestrator"])
 
 
-@router.post("/transcribe")
-async def transcribe_audio(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Transcribes audio to text using Groq's Whisper API.
-    """
+async def _transcribe_audio(file: UploadFile) -> str:
+    """Internal helper to transcribe audio bytes using Groq's Whisper API."""
     if not settings.GROQ_API_KEY:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="GROQ_API_KEY is not configured. Please add it to your .env file."
         )
 
-    # Read audio bytes
     audio_bytes = await file.read()
     filename = file.filename or "recording.webm"
     content_type = file.content_type or "audio/webm"
@@ -68,7 +61,7 @@ async def transcribe_audio(
                 data=data,
                 timeout=30.0
             )
-            
+
             if response.status_code != 200:
                 detail_msg = f"Groq Whisper transcription failed: {response.text}"
                 try:
@@ -81,15 +74,72 @@ async def transcribe_audio(
                     status_code=response.status_code,
                     detail=detail_msg
                 )
-                
+
             res_data = response.json()
-            return {"text": res_data.get("text", "")}
-            
+            return res_data.get("text", "")
+
         except httpx.RequestError as e:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Network error communicating with Groq: {str(e)}"
             )
+
+
+@router.post("/transcribe")
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Transcribes audio to text using Groq's Whisper API.
+    """
+    text = await _transcribe_audio(file)
+    return {"text": text}
+
+
+@router.post("/voice-memo", response_model=AIProcessResponse)
+async def process_voice_memo(
+    file: UploadFile = File(...),
+    session_id: Optional[str] = Form(None),
+    timezone_offset: Optional[int] = Form(None),
+    local_time: Optional[str] = Form(None),
+    google_token: Optional[str] = Form(None),
+    project_id: Optional[str] = Form(None),
+    project_title: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Voice Notes & Audio Memos (Voice-to-Action):
+    Takes recorded audio, transcribes it via Groq Whisper (whisper-large-v3),
+    and executes the agentic pipeline immediately.
+    """
+    transcribed_text = await _transcribe_audio(file)
+    if not transcribed_text or not transcribed_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not detect any speech in the audio memo."
+        )
+
+    ai_request = AIProcessRequest(
+        raw_input=transcribed_text.strip(),
+        session_id=session_id,
+        timezone_offset=timezone_offset,
+        local_time=local_time,
+        google_token=google_token,
+        project_id=project_id,
+        project_title=project_title,
+    )
+    res = await process_ai_command(
+        request=ai_request,
+        current_user=current_user,
+        db=db
+    )
+    if isinstance(res, dict):
+        res["transcription"] = transcribed_text.strip()
+    elif hasattr(res, "transcription"):
+        res.transcription = transcribed_text.strip()
+    return res
 
 
 @router.post("/process", response_model=AIProcessResponse)
@@ -132,6 +182,103 @@ async def process_ai_command(
             await memory_service.save_message(db, user_id, session_id, "user", raw_input)
             await memory_service.save_message(db, user_id, session_id, "assistant", cancel_msg)
             return _make_response({"intent": "clarify"}, summary=cancel_msg, session_id=str(session_id))
+    # ── Handle pending WhatsApp message confirmation ──
+    elif session_data.get("pending_message_action"):
+        pending_message = session_data.get("pending_message_action")
+        confirm_input = raw_input.strip().lower()
+        affirmative_words = ["yes", "y", "confirm", "proceed", "sure", "ok", "okay", "do it", "send", "send it", "yes send it", "go ahead"]
+        negative_words = ["no", "n", "cancel", "stop", "abort", "don't send", "dont send", "nevermind", "never mind"]
+
+        if any(confirm_input == w or confirm_input.startswith(w + " ") for w in affirmative_words):
+            initial_state = pending_message
+            initial_state["confirmed_message"] = True
+            initial_state["raw_input"] = raw_input
+            initial_state["history"] = history
+            session_data["pending_message_action"] = None
+        elif any(confirm_input == w or confirm_input.startswith(w + " ") for w in negative_words):
+            session_data["pending_message_action"] = None
+            cancel_msg = "❌ WhatsApp message cancelled. No message was sent."
+            await memory_service.save_message(db, user_id, session_id, "user", raw_input)
+            await memory_service.save_message(db, user_id, session_id, "assistant", cancel_msg)
+            return _make_response({"intent": "send_whatsapp"}, summary=cancel_msg, session_id=str(session_id))
+        else:
+            initial_state = pending_message
+            initial_state["raw_input"] = raw_input
+            initial_state["history"] = history
+            initial_state["confirmed_message"] = False
+            session_data["pending_message_action"] = None
+    # ── Handle pending contact phone input ──
+    elif session_data.get("pending_contact_phone"):
+        import re
+        from app.services import contact_service
+        pending_contact = session_data.get("pending_contact_phone")
+        phone_match = re.search(r"(\+?\d{10,15})", raw_input)
+        if phone_match:
+            contact_phone = phone_match.group(1)
+            contact_name = pending_contact["name"]
+            # Save the contact for future use!
+            await contact_service.save_contact(db, user_id, contact_name, contact_phone)
+            # Update whatsapp state
+            initial_state = pending_contact["whatsapp_state"]
+            if initial_state.get("whatsapp"):
+                initial_state["whatsapp"]["recipient"] = contact_phone
+                initial_state["whatsapp"]["recipient_name"] = contact_name
+            initial_state["history"] = history
+            session_data["pending_contact_phone"] = None
+        elif raw_input.strip().lower() in ["cancel", "no", "stop"]:
+            session_data["pending_contact_phone"] = None
+            cancel_msg = "Action cancelled."
+            await memory_service.save_message(db, user_id, session_id, "user", raw_input)
+            await memory_service.save_message(db, user_id, session_id, "assistant", cancel_msg)
+            return _make_response({"intent": "send_whatsapp"}, summary=cancel_msg, session_id=str(session_id))
+    # ── Handle pending email confirmation ──
+    elif session_data.get("pending_email_action"):
+        pending_email = session_data.get("pending_email_action")
+        confirm_input = raw_input.strip().lower()
+        affirmative_words = ["yes", "y", "confirm", "proceed", "sure", "ok", "okay", "do it", "send", "send it", "yes send it", "go ahead"]
+        negative_words = ["no", "n", "cancel", "stop", "abort", "don't send", "dont send", "nevermind", "never mind"]
+
+        if any(confirm_input == w or confirm_input.startswith(w + " ") for w in affirmative_words):
+            initial_state = pending_email
+            initial_state["confirmed_email"] = True
+            initial_state["raw_input"] = raw_input
+            initial_state["history"] = history
+            session_data["pending_email_action"] = None
+        elif any(confirm_input == w or confirm_input.startswith(w + " ") for w in negative_words):
+            session_data["pending_email_action"] = None
+            cancel_msg = "❌ Email cancelled. No email was sent."
+            await memory_service.save_message(db, user_id, session_id, "user", raw_input)
+            await memory_service.save_message(db, user_id, session_id, "assistant", cancel_msg)
+            return _make_response({"intent": "send_email"}, summary=cancel_msg, session_id=str(session_id))
+        else:
+            initial_state = pending_email
+            initial_state["raw_input"] = raw_input
+            initial_state["history"] = history
+            initial_state["confirmed_email"] = False
+            session_data["pending_email_action"] = None
+    # ── Handle pending contact email input ──
+    elif session_data.get("pending_contact_email"):
+        import re
+        from app.services import contact_service
+        pending_contact = session_data.get("pending_contact_email")
+        email_match = re.search(r"([\w\.-]+@[\w\.-]+\.\w+)", raw_input)
+        if email_match:
+            contact_email = email_match.group(1)
+            contact_name = pending_contact["name"]
+            # Save or update contact with email
+            await contact_service.save_contact(db, user_id, contact_name, phone="0000000000", email=contact_email)
+            initial_state = pending_contact["email_state"]
+            if initial_state.get("email"):
+                initial_state["email"]["recipient"] = contact_email
+                initial_state["email"]["recipient_name"] = contact_name
+            initial_state["history"] = history
+            session_data["pending_contact_email"] = None
+        elif raw_input.strip().lower() in ["cancel", "no", "stop"]:
+            session_data["pending_contact_email"] = None
+            cancel_msg = "Action cancelled."
+            await memory_service.save_message(db, user_id, session_id, "user", raw_input)
+            await memory_service.save_message(db, user_id, session_id, "assistant", cancel_msg)
+            return _make_response({"intent": "send_email"}, summary=cancel_msg, session_id=str(session_id))
     else:
         # ── Handle Google Sheets link requests ──
         lower_input = raw_input.lower()
@@ -313,6 +460,12 @@ async def process_ai_command(
             summary_msg = await _handle_timeline(db, user_id, final_state, initial_state, session_data, raw_input, request)
         elif intent == "set_reminder":
             summary_msg = await _handle_reminder(db, user_id, final_state, session_data, request)
+        elif intent == "send_whatsapp":
+            summary_msg = await _handle_whatsapp(db, user_id, final_state, initial_state, session_data, raw_input, request)
+        elif intent == "send_email":
+            summary_msg = await _handle_email(db, user_id, final_state, initial_state, session_data, raw_input, request)
+        elif intent == "manage_contact":
+            summary_msg = await _handle_contact(db, user_id, final_state, raw_input)
         elif intent == "track_pending":
             summary_msg = await _handle_pending(db, user_id, final_state, session_data, raw_input)
         elif intent == "generate_report":
@@ -352,7 +505,7 @@ async def process_ai_command(
 # Helpers
 # ══════════════════════════════════════════════════════════════
 
-def _make_response(final_state: dict, summary: str = None, session_id: str = None) -> dict:
+def _make_response(final_state: dict, summary: str = None, session_id: str = None, transcription: str = None) -> dict:
     """Build a standardized response from the workflow state."""
     return {
         "intent": final_state.get("intent", "clarify"),
@@ -370,6 +523,7 @@ def _make_response(final_state: dict, summary: str = None, session_id: str = Non
         "summary": summary or final_state.get("summary"),
         "reasoning_steps": final_state.get("reasoning_steps", []),
         "session_id": session_id,
+        "transcription": transcription,
     }
 
 
@@ -635,6 +789,332 @@ async def _handle_reminder(db, user_id, final_state, session_data, request):
             session_data["pending_state"] = final_state
             return result["message"]
         return result["message"]
+
+
+async def _handle_whatsapp(db, user_id, final_state, initial_state, session_data, raw_input, request):
+    from app.services import whatsapp_service
+    from app.utils.timezone_helper import localize_to_utc
+    from app.config import settings
+    from datetime import datetime, timezone
+    import dateutil.parser
+
+    whatsapp_data = final_state.get("whatsapp") or {}
+    action = (whatsapp_data.get("action") or "send").lower()
+    recipient = whatsapp_data.get("recipient")
+    recipient_name = whatsapp_data.get("recipient_name")
+    message = whatsapp_data.get("message")
+    scheduled_at_raw = whatsapp_data.get("scheduled_at")
+    timezone_offset = request.timezone_offset
+
+    if action in ["list", "read", "query"]:
+        records = await whatsapp_service.list_scheduled_messages(db, user_id, status="pending")
+        if not records:
+            return "No pending scheduled WhatsApp messages found."
+        msg = "### 📲 Scheduled WhatsApp Messages:\n\n"
+        for r in records:
+            target = r["recipient_name"] or r["recipient"]
+            time_str = r["scheduled_at"]
+            if time_str:
+                try:
+                    dt = datetime.fromisoformat(time_str)
+                    time_str = dt.strftime("%b %d, %Y at %I:%M %p")
+                except Exception:
+                    pass
+            msg += f"- **To {target}** (`{r['recipient']}`) — ⏰ *{time_str}*\n"
+            msg += f"  💬 \"{r['message']}\"\n"
+        return msg
+
+    elif action in ["delete", "cancel", "clear"]:
+        target = recipient or message or raw_input
+        res = await whatsapp_service.cancel_scheduled_message(db, user_id, target)
+        return res["message"]
+
+    # Action is 'send' or 'schedule'
+    from app.services import contact_service
+    if recipient:
+        resolved_name, resolved_phone = await contact_service.resolve_contact(db, user_id, recipient)
+        if resolved_phone:
+            recipient_name = resolved_name or recipient_name or recipient
+            recipient = resolved_phone
+            whatsapp_data["recipient"] = recipient
+            whatsapp_data["recipient_name"] = recipient_name
+        elif not contact_service.is_phone_number(recipient):
+            # Recipient is a contact name that hasn't been saved yet!
+            session_data["pending_contact_phone"] = {
+                "name": recipient,
+                "whatsapp_state": final_state
+            }
+            final_state["needs_clarification"] = True
+            prompt_msg = (
+                f"I don't have a phone number saved for **{recipient}** in your contacts.\n\n"
+                f"Please reply with {recipient}'s phone number (e.g. `+91...`). I will save it to your contacts and proceed with sending your message!"
+            )
+            final_state["clarification_message"] = prompt_msg
+            session_data["pending_state"] = final_state
+            return prompt_msg
+    else:
+        recipient = settings.DEFAULT_WHATSAPP_NUMBER or settings.USER_SMS_NUMBER
+        whatsapp_data["recipient"] = recipient
+
+    if not recipient:
+        final_state["needs_clarification"] = True
+        final_state["clarification_message"] = "Please specify a recipient contact name or phone number for the WhatsApp message."
+        session_data["pending_state"] = final_state
+        return final_state["clarification_message"]
+
+    if not message:
+        target_display = recipient_name or recipient
+        final_state["needs_clarification"] = True
+        final_state["clarification_message"] = f"What message would you like to send to {target_display}?"
+        session_data["pending_state"] = final_state
+        return final_state["clarification_message"]
+
+    # Parse scheduled time if present
+    scheduled_dt = None
+    if scheduled_at_raw:
+        try:
+            parsed = dateutil.parser.parse(str(scheduled_at_raw))
+            scheduled_dt = localize_to_utc(parsed, timezone_offset)
+        except Exception:
+            pass
+
+    # Check confirmation flag
+    confirmed = bool(final_state.get("confirmed_message") or initial_state.get("confirmed_message"))
+
+    if not confirmed:
+        # Prompt user for confirmation before sending/scheduling
+        session_data["pending_message_action"] = final_state
+        final_state["needs_clarification"] = True
+
+        target_display = f"{recipient_name} ({recipient})" if recipient_name and recipient_name != recipient else recipient
+        timing_display = "⚡ Send Immediately"
+        if scheduled_dt:
+            local_display = scheduled_dt.astimezone().strftime('%b %d, %Y at %I:%M %p')
+            timing_display = f"⏰ Scheduled for **{local_display}**"
+
+        confirm_prompt = (
+            "📲 **WhatsApp Message Confirmation Required**\n\n"
+            f"- **To**: `{target_display}`\n"
+            f"- **Timing**: {timing_display}\n"
+            f"- **Message**: \"{message}\"\n\n"
+            "Would you like me to send this message? Reply **'Yes'** to proceed or **'No'** to cancel."
+        )
+        final_state["clarification_message"] = confirm_prompt
+        session_data["pending_state"] = final_state
+        return confirm_prompt
+
+    # User confirmed! Execute action
+    if scheduled_dt and scheduled_dt > datetime.now(timezone.utc):
+        sm = await whatsapp_service.schedule_message(
+            db=db,
+            user_id=user_id,
+            recipient=recipient,
+            message=message,
+            scheduled_at=scheduled_dt,
+            recipient_name=recipient_name
+        )
+        local_display = scheduled_dt.astimezone().strftime('%b %d, %Y at %I:%M %p')
+        return f"⏰ WhatsApp message successfully scheduled for **{local_display}** to **{recipient}**:\n\n> \"{message}\""
+    else:
+        res = await whatsapp_service.send_immediate(recipient, message)
+        if res.get("success"):
+            mode = res.get("mode")
+            msg_id = res.get("idMessage")
+            id_str = f" (idMessage: `{msg_id}`)" if msg_id else ""
+            if mode == "local_log":
+                return f"✅ WhatsApp message processed for **{recipient}** (Logged locally — add your Green API credentials to `.env` to enable live WhatsApp delivery):\n\n> \"{message}\""
+            else:
+                return f"✅ WhatsApp message successfully sent via Green API to **{recipient}**{id_str}:\n\n> \"{message}\""
+        else:
+            err = res.get("error") or "Unknown error"
+            return f"❌ Failed to send WhatsApp message to **{recipient}**: {err}"
+
+
+async def _handle_contact(db, user_id, final_state, raw_input):
+    from app.services import contact_service
+    contact_data = final_state.get("contact") or {}
+    action = (contact_data.get("action") or "create").lower()
+    name = contact_data.get("name")
+    phone = contact_data.get("phone")
+
+    if action in ["list", "read", "query", "show"]:
+        contacts = await contact_service.list_contacts(db, user_id)
+        if not contacts:
+            return "No contacts saved yet. You can save one by saying: *'Save contact Alex as +919876543210'*."
+        msg = "### 📇 Saved Contacts:\n\n"
+        for c in contacts:
+            extra = f" ({c.email})" if c.email else ""
+            msg += f"- **{c.name}**: `{c.phone}`{extra}\n"
+        return msg
+
+    elif action in ["delete", "remove"]:
+        target = name or raw_input
+        success = await contact_service.delete_contact(db, user_id, target)
+        if success:
+            return f"✅ Contact '{target}' removed from your address book."
+        return f"Contact '{target}' not found."
+
+    else:  # create or update
+        if not name or not phone:
+            return "Please specify both the contact name and phone number (e.g. *'Save contact Alex as +919876543210'*)."
+        saved = await contact_service.save_contact(
+            db=db,
+            user_id=user_id,
+            name=name,
+            phone=phone,
+            email=contact_data.get("email"),
+            notes=contact_data.get("notes")
+        )
+        return f"✅ Saved contact **{saved.name}** with phone number `{saved.phone}`. You can now send WhatsApp messages to them simply by saying *'Send WhatsApp to {saved.name}'*!"
+
+
+async def _handle_email(db, user_id, final_state, initial_state, session_data, raw_input, request):
+    from app.services import email_service, contact_service
+    from app.utils.timezone_helper import localize_to_utc
+    from datetime import datetime, timezone
+    import dateutil.parser
+
+    email_data = final_state.get("email") or {}
+    action = (email_data.get("action") or "send").lower()
+    recipient = email_data.get("recipient")
+    recipient_name = email_data.get("recipient_name")
+    subject = email_data.get("subject")
+    message = email_data.get("message")
+    scheduled_at_raw = email_data.get("scheduled_at")
+    timezone_offset = request.timezone_offset
+
+    if action in ["list", "read", "query"]:
+        records = await email_service.list_scheduled_emails(db, user_id, status="pending")
+        if not records:
+            return "No pending scheduled emails found."
+        msg = "### 📧 Scheduled Emails:\n\n"
+        for r in records:
+            target = f"{r['recipient_name']} ({r['recipient']})" if r["recipient_name"] else r["recipient"]
+            time_str = r["scheduled_at"]
+            if time_str:
+                try:
+                    dt = datetime.fromisoformat(time_str)
+                    time_str = dt.strftime("%b %d, %Y at %I:%M %p")
+                except Exception:
+                    pass
+            msg += f"- **To {target}** — ⏰ *{time_str}*\n"
+            msg += f"  📌 **Subject**: {r['subject']}\n"
+            msg += f"  📝 \"{r['message'][:80]}...\"\n"
+        return msg
+
+    elif action in ["delete", "cancel", "clear"]:
+        target = recipient or subject or raw_input
+        res = await email_service.cancel_scheduled_email(db, user_id, target)
+        return res["message"]
+
+    # Action is 'send' or 'schedule'
+    if not recipient:
+        final_state["needs_clarification"] = True
+        final_state["clarification_message"] = "Who would you like to email? Please specify a contact name or email address."
+        session_data["pending_state"] = final_state
+        return final_state["clarification_message"]
+
+    # Resolve contact name to email address
+    resolved_name, resolved_email = await contact_service.resolve_contact_email(db, user_id, recipient)
+    if resolved_email:
+        recipient_name = resolved_name or recipient_name or recipient
+        recipient = resolved_email
+        email_data["recipient"] = recipient
+        email_data["recipient_name"] = recipient_name
+    elif not contact_service.is_email_address(recipient):
+        # Recipient is a name that hasn't got an email saved yet
+        session_data["pending_contact_email"] = {
+            "name": recipient,
+            "email_state": final_state
+        }
+        final_state["needs_clarification"] = True
+        prompt_msg = (
+            f"I don't have an email address saved for **{recipient}** in your contacts.\n\n"
+            f"Please reply with {recipient}'s email address (e.g. `name@example.com`). I will save it to your contacts and proceed with drafting your email!"
+        )
+        final_state["clarification_message"] = prompt_msg
+        session_data["pending_state"] = final_state
+        return prompt_msg
+
+    if not message:
+        final_state["needs_clarification"] = True
+        final_state["clarification_message"] = f"What would you like the email to {recipient_name or recipient} to say?"
+        session_data["pending_state"] = final_state
+        return final_state["clarification_message"]
+
+    # Draft subject & body if not already drafted
+    drafted_subject, drafted_body = await email_service.draft_email(
+        instructions=message,
+        recipient_name=recipient_name,
+        subject_hint=subject
+    )
+    email_data["subject"] = drafted_subject
+    email_data["message"] = drafted_body
+
+    # Parse scheduled time if present
+    scheduled_dt = None
+    if scheduled_at_raw:
+        try:
+            parsed = dateutil.parser.parse(str(scheduled_at_raw))
+            scheduled_dt = localize_to_utc(parsed, timezone_offset)
+        except Exception:
+            pass
+
+    # Check confirmation flag
+    confirmed = bool(final_state.get("confirmed_email") or initial_state.get("confirmed_email"))
+
+    if not confirmed:
+        # Prompt user for confirmation before sending/scheduling
+        session_data["pending_email_action"] = final_state
+        final_state["needs_clarification"] = True
+
+        target_display = f"{recipient_name} <{recipient}>" if recipient_name else recipient
+        timing_display = "⚡ Send Immediately"
+        if scheduled_dt:
+            local_display = scheduled_dt.astimezone().strftime('%b %d, %Y at %I:%M %p')
+            timing_display = f"⏰ Scheduled for **{local_display}**"
+
+        confirm_prompt = (
+            "📧 **Email Confirmation Required**\n\n"
+            f"- **To**: `{target_display}`\n"
+            f"- **Subject**: **{drafted_subject}**\n"
+            f"- **Timing**: {timing_display}\n\n"
+            f"**Preview**:\n"
+            f"```\n{drafted_body}\n```\n\n"
+            "Would you like me to send this email? Reply **'Yes'** to proceed or **'No'** to cancel."
+        )
+        final_state["clarification_message"] = confirm_prompt
+        session_data["pending_state"] = final_state
+        return confirm_prompt
+
+    # User confirmed! Execute action
+    if scheduled_dt and scheduled_dt > datetime.now(timezone.utc):
+        sm = await email_service.schedule_email(
+            db=db,
+            user_id=user_id,
+            recipient=recipient,
+            subject=drafted_subject,
+            message=drafted_body,
+            scheduled_at=scheduled_dt,
+            recipient_name=recipient_name
+        )
+        local_display = scheduled_dt.astimezone().strftime('%b %d, %Y at %I:%M %p')
+        return f"⏰ Email successfully scheduled for **{local_display}** to **{recipient}**:\n\n**Subject**: {drafted_subject}\n\n```\n{drafted_body}\n```"
+    else:
+        res = await email_service.send_immediate_email(
+            to=recipient,
+            subject=drafted_subject,
+            body=drafted_body
+        )
+        if res.get("success"):
+            mode = res.get("mode")
+            if mode == "local_log":
+                return f"✅ Email processed for **{recipient}** (Logged locally — add your SMTP credentials to `.env` to enable live sending):\n\n**Subject**: {drafted_subject}\n\n```\n{drafted_body}\n```"
+            else:
+                return f"✅ Email successfully sent to **{recipient}**:\n\n**Subject**: {drafted_subject}\n\n```\n{drafted_body}\n```"
+        else:
+            err = res.get("error") or "Unknown error"
+            return f"❌ Failed to send email to **{recipient}**: {err}"
 
 
 async def _handle_pending(db, user_id, final_state, session_data, raw_input):

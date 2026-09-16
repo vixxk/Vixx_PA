@@ -32,6 +32,21 @@ INTENT_KEYWORDS = {
         "pdf", "report", "export", "download report", "generate report",
         "print report", "give me a pdf", "create pdf", "export pdf",
     ],
+    "send_whatsapp": [
+        "whatsapp", "green api", "green-api", "send whatsapp", "whatsapp message",
+        "message on whatsapp", "schedule whatsapp", "text on whatsapp", "whatsapp to",
+        "ping on whatsapp", "scheduled whatsapp", "scheduled message", "scheduled messages",
+    ],
+    "send_email": [
+        "send email", "send an email", "send mail", "email to", "mail to",
+        "email him", "email her", "email them", "compose email", "schedule email",
+        "scheduled email", "shoot an email", "email ",
+    ],
+    "manage_contact": [
+        "save contact", "add contact", "new contact", "create contact",
+        "list contacts", "show contacts", "delete contact", "remove contact",
+        "contacts list", "all contacts", "phone book", "address book",
+    ],
     "set_reminder": [
         "remind", "reminder", "reminders", "alarm", "alert me", "notify me",
         "notification", "schedule reminder", "ping me", "sms me", "text me",
@@ -117,6 +132,9 @@ async def run_router_agent(state: WorkflowState) -> Dict[str, Any]:
             "classify it into exactly ONE of these intents:\n\n"
             "INTENTS:\n"
             "- 'workspace_overview': Daily briefing, 'what's on my plate', overview of projects/tasks/schedules, executive workspace summary.\n"
+            "- 'send_whatsapp': Send, schedule, list, or cancel WHATSAPP messages to a contact/recipient via Green API.\n"
+            "- 'send_email': Draft, send, schedule, list, or cancel EMAILS to a contact/recipient via SMTP.\n"
+            "- 'manage_contact': Save, add, list, or delete address book contacts (name, phone number, email).\n"
             "- 'create_project': Create, list, view, delete, or manage PROJECTS.\n"
             "- 'create_task': Create, list, view, update, clear, or delete TASKS/TODOS.\n"
             "- 'track_payment': Log, track, view, update, or delete PAYMENT/FINANCIAL transactions.\n"
@@ -127,15 +145,17 @@ async def run_router_agent(state: WorkflowState) -> Dict[str, Any]:
             "- 'generate_summary': Generate a high-level kickoff summary.\n"
             "- 'clarify': Ambiguous, general conversation, or unknown.\n\n"
             "CRITICAL RULES:\n"
-            "1. If the user asks for a PDF, report, or export of ANY data → 'generate_report' (NEVER 'create_project')\n"
-            "2. 'give me a pdf of [project name]' → 'generate_report' (NOT create_project)\n"
-            "3. 'give me all data of [project]' → 'create_project' with action 'read'\n"
-            "4. If the user says 'this' or 'that', refer to the conversation context to understand what they mean\n"
-            "5. 'remind me' / 'set a reminder' / 'alert me' → ALWAYS 'set_reminder'\n"
-            "6. If user asks for list/status/view/deletion of a resource → that resource's intent\n"
-            "7. If the user asks for daily briefing, what's on their plate, overall status across workspace → 'workspace_overview'\n"
-            "8. If the user is setting, discussing, or updating the overall budget, cost, total amount, or value of a project (e.g. 'total amount for mingo is 25000', 'set budget to 50k') → 'create_project' (NOT 'track_payment'). 'track_payment' is only for individual transactions/payments logged.\n"
-            "9. 'list finished/completed/active projects' or 'show finished projects and their revenue' → ALWAYS 'create_project' (NOT 'analytics'). Any query about listing projects by their status goes to 'create_project'.\n"
+            "1. If user asks to send an email, mail someone, or schedule an email → 'send_email'\n"
+            "2. If user asks to send a message via WhatsApp, send a WhatsApp text, or schedule a WhatsApp message → 'send_whatsapp'\n"
+            "2. If the user asks for a PDF, report, or export of ANY data → 'generate_report' (NEVER 'create_project')\n"
+            "3. 'give me a pdf of [project name]' → 'generate_report' (NOT create_project)\n"
+            "4. 'give me all data of [project]' → 'create_project' with action 'read'\n"
+            "5. If the user says 'this' or 'that', refer to the conversation context to understand what they mean\n"
+            "6. 'remind me' / 'set a reminder' / 'alert me' → ALWAYS 'set_reminder'\n"
+            "7. If user asks for list/status/view/deletion of a resource → that resource's intent\n"
+            "8. If the user asks for daily briefing, what's on their plate, overall status across workspace → 'workspace_overview'\n"
+            "9. If the user is setting, discussing, or updating the overall budget, cost, total amount, or value of a project (e.g. 'total amount for mingo is 25000', 'set budget to 50k') → 'create_project' (NOT 'track_payment'). 'track_payment' is only for individual transactions/payments logged.\n"
+            "10. 'list finished/completed/active projects' or 'show finished projects and their revenue' → ALWAYS 'create_project' (NOT 'analytics'). Any query about listing projects by their status goes to 'create_project'.\n"
             f"{history_context}\n\n"
             "Respond ONLY with JSON: {\"intent\": \"one_of_the_above_intents\"}"
         )

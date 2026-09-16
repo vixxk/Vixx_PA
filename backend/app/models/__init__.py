@@ -8,6 +8,8 @@ from app.models.payment import Payment
 from app.models.contract import Contract
 from app.models.pending_thing import PendingThing
 from app.models.reminder import Reminder
+from app.models.scheduled_message import ScheduledMessage
+from app.models.contact import Contact
 from app.models.conversation_log import ConversationLog
 from app.models.entity_memory import EntityMemory
 from app.models.session_summary import SessionSummary
@@ -24,6 +26,8 @@ __all__ = [
     "Contract",
     "PendingThing",
     "Reminder",
+    "ScheduledMessage",
+    "Contact",
     "ConversationLog",
     "EntityMemory",
     "SessionSummary",

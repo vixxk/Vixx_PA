@@ -51,12 +51,15 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
     timeline = state.get("timeline") or []
     payment = state.get("payment") or {"action": "create", "project_title": None, "amount": None, "currency": "INR", "payment_type": "Advance", "received_date": None, "notes": None, "status": "pending"}
     reminder = state.get("reminder") or {"action": "create", "title": None, "description": None, "remind_at": None, "channel": "sms"}
+    whatsapp = state.get("whatsapp") or {"action": "send", "recipient": None, "recipient_name": None, "message": None, "scheduled_at": None}
+    email = state.get("email") or {"action": "send", "recipient": None, "recipient_name": None, "subject": None, "message": None, "scheduled_at": None}
+    contact = state.get("contact") or {"action": "create", "name": None, "phone": None, "email": None, "notes": None}
     pending = state.get("pending") or {"action": "create", "title": None, "description": None, "project_title": None, "is_completed": False}
     report = state.get("report") or {"report_type": None, "project_title": None, "theme": None, "title": None}
     client = state.get("client") or {"action": "create", "name": None, "email": None, "phone": None, "company": None, "notes": None, "priority_score": None}
     analytics = state.get("analytics") or {"action": "dashboard", "project_title": None}
 
-    if intent not in ["create_project", "create_task", "track_payment", "set_reminder", "track_pending", "generate_report", "manage_client", "analytics", "update_timeline", "manage_timeline"]:
+    if intent not in ["create_project", "create_task", "track_payment", "set_reminder", "track_pending", "generate_report", "manage_client", "analytics", "update_timeline", "manage_timeline", "send_whatsapp", "send_email", "manage_contact"]:
         return {}
 
     try:
@@ -113,6 +116,55 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                 "- description: optional extra detail\n"
                 "- remind_at: ISO 8601 datetime. (For updates, this is the new rescheduled time). Parse relative times using the Date Context above.\n"
                 "- channel: 'sms', 'email', or 'both'. Only extract 'both' if explicitly requested.\n\n"
+                "Respond ONLY with a JSON object."
+            )
+        elif intent == "send_whatsapp":
+            system_prompt = (
+                "You are a requirements extraction agent for WhatsApp messaging via Green API.\n"
+                "Extract structured details for sending, scheduling, listing, or cancelling a WhatsApp message.\n\n"
+                f"Date & Time Calculation Context:\n{date_context}\n"
+                "Extract these fields:\n"
+                "- action: 'send' (immediate message), 'schedule' (send later/at specific time), 'list' (view scheduled messages), 'cancel' (cancel a scheduled message)\n"
+                "- recipient: phone number or recipient identifier (e.g. '+919876543210', '9876543210'). If user refers to a name (e.g. 'Alex'), put in recipient.\n"
+                "- recipient_name: contact name if mentioned (e.g. 'Alex', 'client', 'John').\n"
+                "- message: the text content of the message to send.\n"
+                "- scheduled_at: ISO 8601 datetime if scheduled for later (e.g. 'tomorrow at 10 AM', 'in 30 mins'). Null if immediate.\n\n"
+                "RULES:\n"
+                "1. If user mentions a future time or says 'schedule' → action is 'schedule', parse scheduled_at.\n"
+                "2. If user asks to list/view scheduled messages → action is 'list'.\n"
+                "3. If user asks to cancel/delete a scheduled message → action is 'cancel'.\n"
+                "4. Extract message text cleanly without preamble like 'saying' or 'that'.\n\n"
+                "Respond ONLY with a JSON object."
+            )
+        elif intent == "send_email":
+            system_prompt = (
+                "You are a requirements extraction agent for outbound email messaging.\n"
+                "Extract structured details for sending, drafting, scheduling, or listing emails.\n\n"
+                f"Date & Time Calculation Context:\n{date_context}\n"
+                "Extract these fields:\n"
+                "- action: 'send' (immediate email), 'schedule' (send later), 'list' (view scheduled emails), 'cancel' (cancel a scheduled email)\n"
+                "- recipient: email address or recipient contact name (e.g. 'alex@example.com', 'Alex', 'client')\n"
+                "- recipient_name: friendly contact name (e.g. 'Alex')\n"
+                "- subject: email subject line if specified or implied\n"
+                "- message: instructions or text body of the email\n"
+                "- scheduled_at: ISO 8601 datetime if scheduled for later (e.g. 'tomorrow at 9 AM'). Null if immediate.\n\n"
+                "RULES:\n"
+                "1. If user mentions a future time or says 'schedule' → action is 'schedule', parse scheduled_at.\n"
+                "2. If user asks to list/view scheduled emails → action is 'list'.\n"
+                "3. If user asks to cancel/delete a scheduled email → action is 'cancel'.\n"
+                "4. Extract message text cleanly without preamble like 'saying' or 'that'.\n\n"
+                "Respond ONLY with a JSON object."
+            )
+        elif intent == "manage_contact":
+            system_prompt = (
+                "You are a requirements extraction agent for managing address book contacts.\n"
+                "Extract structured details for saving, listing, or deleting contacts.\n\n"
+                "Extract these fields:\n"
+                "- action: 'create' (save or add contact), 'list' (view contacts), 'delete' (remove contact)\n"
+                "- name: contact person's name (e.g. 'Alex', 'Sarah', 'John Doe')\n"
+                "- phone: phone number (e.g. '+919876543210')\n"
+                "- email: optional email address\n"
+                "- notes: optional notes\n\n"
                 "Respond ONLY with a JSON object."
             )
         elif intent == "generate_report":
@@ -283,6 +335,18 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                 for key in ["action", "title", "description", "remind_at", "channel"]:
                     if extracted.get(key) is not None:
                         reminder[key] = extracted[key]
+            elif intent == "send_whatsapp":
+                for key in ["action", "recipient", "recipient_name", "message", "scheduled_at"]:
+                    if extracted.get(key) is not None:
+                        whatsapp[key] = extracted[key]
+            elif intent == "send_email":
+                for key in ["action", "recipient", "recipient_name", "subject", "message", "scheduled_at"]:
+                    if extracted.get(key) is not None:
+                        email[key] = extracted[key]
+            elif intent == "manage_contact":
+                for key in ["action", "name", "phone", "email", "notes"]:
+                    if extracted.get(key) is not None:
+                        contact[key] = extracted[key]
             elif intent == "generate_report":
                 for key in ["report_type", "project_title", "theme", "title", "filename"]:
                     if extracted.get(key) is not None:
@@ -530,6 +594,84 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
                 if parsed_d:
                     reminder["remind_at"] = parsed_d
 
+    # Smart heuristics for WhatsApp messaging
+    if intent == "send_whatsapp":
+        # Extract phone number if missing from LLM response
+        if not whatsapp.get("recipient"):
+            phone_match = re.search(r"(\+?\d{10,15})", raw_input)
+            if phone_match:
+                whatsapp["recipient"] = phone_match.group(1)
+            else:
+                name_match = re.search(r"(?:to|message)\s+([A-Za-z]+)\b", raw_input, re.IGNORECASE)
+                if name_match and name_match.group(1).lower() not in ["whatsapp", "green", "api", "him", "her", "them"]:
+                    whatsapp["recipient_name"] = name_match.group(1)
+                    whatsapp["recipient"] = name_match.group(1)
+
+        # Extract message content if quotes are used
+        if not whatsapp.get("message"):
+            quote_match = re.search(r"[\"']([^\"']{2,})[\"']", raw_input)
+            if quote_match:
+                whatsapp["message"] = quote_match.group(1)
+            else:
+                saying_match = re.search(r"(?:saying|that|message\s*:)\s*(.+)$", raw_input, re.IGNORECASE)
+                if saying_match:
+                    whatsapp["message"] = saying_match.group(1).strip()
+
+        # Check for scheduling intent and parse relative dates
+        low_input = raw_input.lower()
+        if any(w in low_input for w in ["schedule", "later", "tomorrow", "tonight", "at ", "pm", "am", "in ", "mins", "hours"]):
+            if not whatsapp.get("scheduled_at"):
+                parsed_d = parse_date_from_text(raw_input, local_dt if 'local_dt' in locals() else datetime.now())
+                if parsed_d:
+                    whatsapp["scheduled_at"] = parsed_d
+                    whatsapp["action"] = "schedule"
+            elif whatsapp.get("scheduled_at"):
+                whatsapp["action"] = "schedule"
+
+    # Smart heuristics for Contact management
+    if intent == "manage_contact":
+        if not contact.get("phone"):
+            p_match = re.search(r"(\+?\d{10,15})", raw_input)
+            if p_match:
+                contact["phone"] = p_match.group(1)
+        if not contact.get("name"):
+            n_match = re.search(r"(?:contact|add|save)\s+([A-Za-z\s]+?)(?:\s+(?:as|with|phone|number|\+?\d))", raw_input, re.IGNORECASE)
+            if n_match:
+                contact["name"] = n_match.group(1).strip()
+
+    # Smart heuristics for Email messaging
+    if intent == "send_email":
+        if not email.get("recipient"):
+            email_match = re.search(r"([\w\.-]+@[\w\.-]+\.\w+)", raw_input)
+            if email_match:
+                email["recipient"] = email_match.group(1)
+            else:
+                to_match = re.search(r"(?:email|mail|to)\s+([A-Za-z]+)\b", raw_input, re.IGNORECASE)
+                if to_match and to_match.group(1).lower() not in ["email", "mail", "him", "her", "them"]:
+                    email["recipient_name"] = to_match.group(1)
+                    email["recipient"] = to_match.group(1)
+
+        if not email.get("message"):
+            quote_match = re.search(r"[\"']([^\"']{2,})[\"']", raw_input)
+            if quote_match:
+                email["message"] = quote_match.group(1)
+            else:
+                saying_match = re.search(r"(?:saying|that|message\s*:|body\s*:)\s*(.+)$", raw_input, re.IGNORECASE)
+                if saying_match:
+                    email["message"] = saying_match.group(1).strip()
+                else:
+                    email["message"] = raw_input
+
+        low_input = raw_input.lower()
+        if any(w in low_input for w in ["schedule", "later", "tomorrow", "tonight", "at ", "pm", "am", "in ", "mins", "hours"]):
+            if not email.get("scheduled_at"):
+                parsed_d = parse_date_from_text(raw_input, local_dt if 'local_dt' in locals() else datetime.now())
+                if parsed_d:
+                    email["scheduled_at"] = parsed_d
+                    email["action"] = "schedule"
+            elif email.get("scheduled_at"):
+                email["action"] = "schedule"
+
     context_project = state.get("project_title")
     if context_project:
         if todos and isinstance(todos, list) and not todos[-1].get("project_title"):
@@ -547,6 +689,9 @@ async def run_requirement_extractor_agent(state: WorkflowState) -> Dict[str, Any
         "timeline": timeline,
         "payment": payment,
         "reminder": reminder,
+        "whatsapp": whatsapp,
+        "email": email,
+        "contact": contact,
         "pending": pending,
         "report": report,
         "client": client,

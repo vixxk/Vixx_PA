@@ -304,6 +304,24 @@ export const api = {
       });
       return handleResponse(response);
     },
+    voiceMemo: async (audioBlob, sessionId = null, projectId = null, projectTitle = null) => {
+      const headers = getHeaders();
+      delete headers['Content-Type'];
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'recording.webm');
+      if (sessionId) formData.append('session_id', sessionId);
+      formData.append('timezone_offset', new Date().getTimezoneOffset().toString());
+      formData.append('local_time', new Date().toISOString());
+      if (projectId && projectId !== 'all') formData.append('project_id', projectId);
+      if (projectTitle) formData.append('project_title', projectTitle);
+
+      const response = await fetch(`${API_BASE_URL}/ai/voice-memo`, {
+        method: 'POST',
+        headers: headers,
+        body: formData,
+      });
+      return handleResponse(response);
+    },
     feedback: async (rating, feedbackText = null) => {
       const response = await fetch(`${API_BASE_URL}/ai/feedback`, {
         method: 'POST',
@@ -414,5 +432,112 @@ export const api = {
       });
       return handleResponse(response);
     }
+  },
+
+  email: {
+    send: async (data) => {
+      const response = await fetch(`${API_BASE_URL}/email/send`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      return handleResponse(response);
+    },
+    schedule: async (data) => {
+      const response = await fetch(`${API_BASE_URL}/email/schedule`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      return handleResponse(response);
+    },
+    listScheduled: async (status = 'pending') => {
+      const response = await fetch(`${API_BASE_URL}/email/scheduled?status_filter=${status}`, {
+        method: 'GET',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    },
+    cancelScheduled: async (messageId) => {
+      const response = await fetch(`${API_BASE_URL}/email/scheduled/${messageId}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    }
+  },
+
+  whatsapp: {
+    status: async () => {
+      const response = await fetch(`${API_BASE_URL}/whatsapp/status`, {
+        method: 'GET',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    },
+    send: async (data) => {
+      const response = await fetch(`${API_BASE_URL}/whatsapp/send`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      return handleResponse(response);
+    },
+    schedule: async (data) => {
+      const response = await fetch(`${API_BASE_URL}/whatsapp/schedule`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      return handleResponse(response);
+    },
+    listScheduled: async (status = 'pending') => {
+      const response = await fetch(`${API_BASE_URL}/whatsapp/scheduled?status_filter=${status}`, {
+        method: 'GET',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    },
+    cancelScheduled: async (messageId) => {
+      const response = await fetch(`${API_BASE_URL}/whatsapp/scheduled/${messageId}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    }
+  },
+
+  contacts: {
+    list: async () => {
+      const response = await fetch(`${API_BASE_URL}/contacts/`, {
+        method: 'GET',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    },
+    create: async (data) => {
+      const response = await fetch(`${API_BASE_URL}/contacts/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      return handleResponse(response);
+    },
+    update: async (id, data) => {
+      const response = await fetch(`${API_BASE_URL}/contacts/${id}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      return handleResponse(response);
+    },
+    delete: async (id) => {
+      const response = await fetch(`${API_BASE_URL}/contacts/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      return handleResponse(response);
+    }
   }
 };
+
