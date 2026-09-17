@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     TWILIO_PHONE_NUMBER: str = ""
     USER_SMS_NUMBER: str = "+917253648994"
 
+    # Green API (WhatsApp)
+    GREEN_API_INSTANCE_ID: str = ""
+    GREEN_API_API_TOKEN_INSTANCE: str = ""
+    GREEN_API_HOST: str = "https://api.green-api.com"
+    DEFAULT_WHATSAPP_NUMBER: str = ""
+
 
     # CORS Origins
     CORS_ORIGINS: Union[str, List[str]] = ["http://localhost:5173", "http://127.0.0.1:5173"]
